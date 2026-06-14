@@ -1,0 +1,15 @@
+{
+  "name": "Отчёт",
+  "short_name": "Отчёт",
+  "description": "Учёт расходов и формирование отчётов",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#ff2d55",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
