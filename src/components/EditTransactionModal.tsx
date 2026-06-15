@@ -30,7 +30,7 @@ export default function EditTransactionModal({ transaction, onClose, onSave, onD
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#e5e5ea]/80 active:bg-[#d1d1d6] transition"><X size={16} className="text-[#8e8e93]" /></button>
         </div>
         <input type="text" placeholder="Название" value={category} onChange={e => setCategory(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-[15px] font-medium mb-3 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#007aff]/30 border border-white/50 transition" />
-        <input type="number" inputMode="numeric" placeholder="Сумма" value={amount} onChange={e => setAmount(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-lg font-medium mb-3 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#007aff]/30 border border-white/50 transition" />
+        <input type="number" inputMode="decimal" placeholder="Сумма" value={amount} onChange={e => setAmount(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-lg font-medium mb-3 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#007aff]/30 border border-white/50 transition" />
         <button onClick={() => setHasReceipt(!hasReceipt)} className={`flex items-center gap-2 w-full px-4 py-3 rounded-2xl mb-4 transition-all ${hasReceipt ? 'bg-[#34c759] text-white' : 'bg-[#e5e5ea]/50 text-[#8e8e93] border border-white/50'}`}>
           <Receipt size={16} /><span className="font-medium text-sm">{hasReceipt ? 'Чек есть ✓' : 'Чек отсутствует'}</span>
         </button>

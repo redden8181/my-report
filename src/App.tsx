@@ -145,7 +145,7 @@ function MainApp() {
                 {state.categoryHints[activeCategory].map((a: number) => <button key={a} onClick={() => setExpAmount(String(a))} className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${expAmount === String(a) ? 'bg-[#ff2d55] text-white' : 'bg-[#e5e5ea]/60 text-[#1c1c1e] active:scale-95'}`}>{a} ₽</button>)}
               </div>
             )}
-            <input type="number" inputMode="numeric" placeholder="Сумма" value={expAmount} onChange={e => setExpAmount(e.target.value)} className="w-full rounded-2xl px-4 py-2.5 text-base font-medium bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#ff2d55]/30 border border-white/50 transition" />
+            <input type="number" inputMode="decimal" placeholder="Сумма" value={expAmount} onChange={e => setExpAmount(e.target.value)} className="w-full rounded-2xl px-4 py-2.5 text-base font-medium bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#ff2d55]/30 border border-white/50 transition" />
             <div className="flex gap-2">
               <button onClick={() => setExpHasReceipt(!expHasReceipt)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl transition-all text-sm font-medium ${expHasReceipt ? 'bg-[#34c759] text-white' : 'bg-[#e5e5ea]/60 text-[#8e8e93]'}`}><Receipt size={14} /><span>{expHasReceipt ? 'Чек ✓' : 'Чек'}</span></button>
               <button onClick={handleAddExpense} disabled={!activeCategory || !expAmount || parseFloat(expAmount) <= 0} className="flex-1 bg-[#ff2d55] text-white py-2.5 rounded-2xl font-semibold text-sm disabled:opacity-30 transition-all active:scale-[0.97] shadow-sm shadow-red-300/40">Добавить</button>

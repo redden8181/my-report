@@ -24,7 +24,7 @@ export default function TopupModal({ onClose, onTopup }: Props) {
           <h2 className="text-[17px] font-bold text-[#1c1c1e]">Пополнение баланса</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#e5e5ea]/80 active:bg-[#d1d1d6] transition"><X size={16} className="text-[#8e8e93]" /></button>
         </div>
-        <input type="number" inputMode="numeric" placeholder="Введите сумму" value={amount} onChange={e => setAmount(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-lg font-medium mb-4 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#34c759]/40 border border-white/50 transition" autoFocus />
+        <input type="number" inputMode="decimal" placeholder="Введите сумму" value={amount} onChange={e => setAmount(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-lg font-medium mb-4 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#34c759]/40 border border-white/50 transition" autoFocus />
         <button onClick={handleSubmit} disabled={!amount || parseFloat(amount) <= 0} className="w-full bg-[#34c759] text-white py-3 rounded-2xl font-semibold text-[17px] disabled:opacity-30 transition active:scale-[0.97] shadow-sm shadow-green-300/40">Пополнить</button>
       </div>
     </div>
