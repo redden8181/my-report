@@ -24,4 +24,5 @@ export interface AppData {
   transactions: Transaction[];
   reports: Report[];
   quickCategories?: string[];
+  categoryHints?: Record<string, number[]>;
 }

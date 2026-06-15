@@ -26,7 +26,7 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
-const PARKING_AMOUNTS = [150, 380, 450, 600, 800];
+// Quick amount hints now come from state.categoryHints
 
 type Screen = 'main' | 'report-preview' | 'reports-history' | 'settings';
 
@@ -140,9 +140,9 @@ function MainApp() {
                 <button onClick={() => { setExpCategory(''); setExpCustomCategory(''); }} className="ml-auto text-[12px] text-[#007aff] active:opacity-60">Сбросить</button>
               </div>
             )}
-            {activeCategory === 'Парковка' && (
+            {activeCategory && state.categoryHints[activeCategory] && state.categoryHints[activeCategory].length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
-                {PARKING_AMOUNTS.map(a => <button key={a} onClick={() => setExpAmount(String(a))} className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${expAmount === String(a) ? 'bg-[#ff2d55] text-white' : 'bg-[#e5e5ea]/60 text-[#1c1c1e] active:scale-95'}`}>{a} ₽</button>)}
+                {state.categoryHints[activeCategory].map((a: number) => <button key={a} onClick={() => setExpAmount(String(a))} className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${expAmount === String(a) ? 'bg-[#ff2d55] text-white' : 'bg-[#e5e5ea]/60 text-[#1c1c1e] active:scale-95'}`}>{a} ₽</button>)}
               </div>
             )}
             <input type="number" inputMode="numeric" placeholder="Сумма" value={expAmount} onChange={e => setExpAmount(e.target.value)} className="w-full rounded-2xl px-4 py-2.5 text-base font-medium bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#ff2d55]/30 border border-white/50 transition" />
