@@ -26,6 +26,31 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
+function getDateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatHistoryGroupLabel(iso: string): string {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const dateKey = getDateKey(iso);
+  const todayKey = getDateKey(today.toISOString());
+  const yesterdayKey = getDateKey(yesterday.toISOString());
+
+  if (dateKey === todayKey) return 'Сегодня';
+  if (dateKey === yesterdayKey) return 'Вчера';
+
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString('ru-RU', sameYear
+    ? { day: 'numeric', month: 'long' }
+    : { day: 'numeric', month: 'long', year: 'numeric' }
+  );
+}
+
 // Quick amount hints now come from state.categoryHints
 
 type Screen = 'main' | 'report-preview' | 'reports-history' | 'settings';
@@ -88,6 +113,17 @@ function MainApp() {
 
   const totalIn = state.transactions.filter(t => t.type === 'topup').reduce((s, t) => s + t.amount, 0);
   const totalOut = state.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+
+  const historyGroups = state.transactions.reduce<Array<{ key: string; label: string; items: Transaction[] }>>((acc, t) => {
+    const key = getDateKey(t.date);
+    const last = acc[acc.length - 1];
+    if (!last || last.key !== key) {
+      acc.push({ key, label: formatHistoryGroupLabel(t.date), items: [t] });
+    } else {
+      last.items.push(t);
+    }
+    return acc;
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f2f2f7]">
@@ -167,32 +203,41 @@ function MainApp() {
               <p className="text-4xl mb-2">📝</p><p className="text-[#8e8e93] text-sm font-medium">Нет операций</p>
             </div>
           ) : (
-            <div className="bg-white/70 backdrop-blur-xl rounded-[20px] border border-white/80 overflow-hidden divide-y divide-[#c6c6c8]/30">
-              {state.transactions.map((t) => (
-                <div key={t.id}>
-                  <button onClick={() => setExpandedId(expandedId === t.id ? null : t.id)} className="w-full text-left">
-                    <div className={`flex items-center justify-between px-4 py-3 transition ${expandedId === t.id ? 'bg-black/[0.03]' : 'active:bg-black/[0.03]'}`}>
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${t.type === 'topup' ? 'bg-[#34c759]/15 text-[#34c759]' : 'bg-[#ff2d55]/10 text-[#ff2d55]'}`}>{t.type === 'topup' ? '＋' : '−'}</div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-[15px] font-medium text-[#1c1c1e] truncate">{t.category}</p>
-                            {t.type === 'expense' && t.hasReceipt && <span className="text-[10px] bg-[#34c759]/15 text-[#34c759] px-1.5 py-0.5 rounded-full font-semibold">чек</span>}
+            <div className="space-y-3">
+              {historyGroups.map((group) => (
+                <div key={group.key}>
+                  <div className="px-1 mb-1.5">
+                    <p className="text-[12px] font-semibold text-[#8e8e93]">{group.label}</p>
+                  </div>
+                  <div className="bg-white/70 backdrop-blur-xl rounded-[20px] border border-white/80 overflow-hidden divide-y divide-[#c6c6c8]/30">
+                    {group.items.map((t) => (
+                      <div key={t.id}>
+                        <button onClick={() => setExpandedId(expandedId === t.id ? null : t.id)} className="w-full text-left">
+                          <div className={`flex items-center justify-between px-4 py-3 transition ${expandedId === t.id ? 'bg-black/[0.03]' : 'active:bg-black/[0.03]'}`}>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${t.type === 'topup' ? 'bg-[#34c759]/15 text-[#34c759]' : 'bg-[#ff2d55]/10 text-[#ff2d55]'}`}>{t.type === 'topup' ? '＋' : '−'}</div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[15px] font-medium text-[#1c1c1e] truncate">{t.category}</p>
+                                  {t.type === 'expense' && t.hasReceipt && <span className="text-[10px] bg-[#34c759]/15 text-[#34c759] px-1.5 py-0.5 rounded-full font-semibold">чек</span>}
+                                </div>
+                                <p className="text-[12px] text-[#8e8e93]">{formatDate(t.date)} • {formatTime(t.date)}</p>
+                              </div>
+                            </div>
+                            <div className="text-right ml-3 flex-shrink-0">
+                              <p className={`text-[15px] font-semibold ${t.type === 'topup' ? 'text-[#34c759]' : 'text-[#ff2d55]'}`}>{t.type === 'topup' ? '+' : '−'}{formatMoney(t.amount)}</p>
+                              <p className="text-[12px] text-[#8e8e93]">{formatMoney(t.balanceAfter)}</p>
+                            </div>
                           </div>
-                          <p className="text-[12px] text-[#8e8e93]">{formatDate(t.date)} • {formatTime(t.date)}</p>
-                        </div>
+                        </button>
+                        {expandedId === t.id && (
+                          <div className="flex justify-end px-4 py-2 bg-black/[0.02]">
+                            <button onClick={() => { setEditingTransaction(t); setExpandedId(null); }} className="text-[13px] font-medium text-[#007aff] bg-[#007aff]/10 px-3.5 py-1.5 rounded-full active:scale-95 transition">Редактировать</button>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right ml-3 flex-shrink-0">
-                        <p className={`text-[15px] font-semibold ${t.type === 'topup' ? 'text-[#34c759]' : 'text-[#ff2d55]'}`}>{t.type === 'topup' ? '+' : '−'}{formatMoney(t.amount)}</p>
-                        <p className="text-[12px] text-[#8e8e93]">{formatMoney(t.balanceAfter)}</p>
-                      </div>
-                    </div>
-                  </button>
-                  {expandedId === t.id && (
-                    <div className="flex justify-end px-4 py-2 bg-black/[0.02]">
-                      <button onClick={() => { setEditingTransaction(t); setExpandedId(null); }} className="text-[13px] font-medium text-[#007aff] bg-[#007aff]/10 px-3.5 py-1.5 rounded-full active:scale-95 transition">Редактировать</button>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
