@@ -124,7 +124,7 @@ export function generateReportExcel(
     ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: fmtDate(t.date), t: 's', s: sCell('center', false, last) };
     ws[XLSX.utils.encode_cell({ r, c: 2 })] = { v: t.category, t: 's', s: sCell('left', false, last) };
     ws[XLSX.utils.encode_cell({ r, c: 3 })] = { v: (isTopup ? '+' : '−') + fmtMoney(t.amount), t: 's', s: sCell('right', true, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: isTopup ? '—' : (t.hasReceipt ? 'Да' : 'Нет'), t: 's', s: sCell('center', false, last) };
+    ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: isTopup ? '—' : (t.hasReceipt ? 'Есть' : '—'), t: 's', s: sCell('center', false, last) };
     ws[XLSX.utils.encode_cell({ r, c: 5 })] = { v: fmtMoney(t.balanceAfter), t: 's', s: sCell('right', true, last) };
   });
 
