@@ -1,10 +1,16 @@
+export const APP_VERSION = "2.0.0";
+
+export type TransactionType = "expense" | "topup";
+
 export interface Transaction {
   id: string;
-  type: 'expense' | 'topup';
+  type: TransactionType;
   category: string;
+  /** Всегда положительная. Знак выводится из type. */
   amount: number;
   hasReceipt: boolean;
-  date: string; // ISO string
+  /** ISO-строка даты */
+  date: string;
   balanceAfter: number;
 }
 
@@ -25,4 +31,14 @@ export interface AppData {
   reports: Report[];
   quickCategories?: string[];
   categoryHints?: Record<string, number[]>;
+}
+
+/** Нормализованное состояние (после миграции старых бэкапов). */
+export interface AppState {
+  version: string;
+  balance: number;
+  transactions: Transaction[];
+  reports: Report[];
+  quickCategories: string[];
+  categoryHints: Record<string, number[]>;
 }

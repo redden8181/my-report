@@ -1,215 +1,248 @@
-import XLSX from 'xlsx-js-style';
-import type { Transaction } from './types';
+import * as XLSX from "xlsx-js-style";
+import type { Report, Transaction } from "./types";
+import {
+  backupFileName,
+  downloadBlob,
+  fmtDateTimeExcel,
+  reportFileName,
+} from "./utils";
 
-const MONTHS = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-];
+/* Чёрно-белое оформление: тонкие серые границы, серая шапка и блок итогов. */
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+const THIN = { style: "thin", color: { rgb: "8C8C8C" } } as const;
+const BORDER = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+
+const S_TITLE = {
+  font: { bold: true, sz: 14, color: { rgb: "000000" } },
+};
+const S_PERIOD = { font: { sz: 10, color: { rgb: "595959" } } };
+const S_HEAD = {
+  font: { bold: true, sz: 10, color: { rgb: "000000" } },
+  fill: { patternType: "solid", fgColor: { rgb: "E0E0E0" } },
+  border: BORDER,
+  alignment: { horizontal: "center", vertical: "center" },
+};
+const S_BODY = { font: { sz: 10, color: { rgb: "000000" } }, border: BORDER };
+const S_BODY_CENTER = {
+  ...S_BODY,
+  alignment: { horizontal: "center" },
+};
+const S_TOTAL_LABEL = {
+  font: { bold: true, sz: 10, color: { rgb: "000000" } },
+  fill: { patternType: "solid", fgColor: { rgb: "F0F0F0" } },
+  border: BORDER,
+  alignment: { horizontal: "left" },
+};
+const S_TOTAL_VALUE = {
+  font: { bold: true, sz: 10, color: { rgb: "000000" } },
+  fill: { patternType: "solid", fgColor: { rgb: "F0F0F0" } },
+  border: BORDER,
+  alignment: { horizontal: "right" },
+};
+
+const MONEY_FMT = "#,##0.00";
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+type CellRef = { r: number; c: number };
+const addr = (p: CellRef) => XLSX.utils.encode_cell(p);
+
+function ensureCell(
+  ws: XLSX.WorkSheet,
+  p: CellRef
+): XLSX.CellObject {
+  const a = addr(p);
+  if (!ws[a]) ws[a] = { t: "s", v: "" };
+  return ws[a] as XLSX.CellObject;
 }
-function fmtDateHuman(iso: string) { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
-function fmtDateHumanFull(iso: string) { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
-function fmtMoney(n: number) { return n.toLocaleString('ru-RU') + ' ₽'; }
 
-function buildFileName(startDate: string, endDate: string): string {
-  const s = new Date(startDate), e = new Date(endDate);
-  return s.getFullYear() === e.getFullYear()
-    ? `${fmtDateHuman(startDate)} - ${fmtDateHumanFull(endDate)}.xlsx`
-    : `${fmtDateHumanFull(startDate)} - ${fmtDateHumanFull(endDate)}.xlsx`;
+function style(ws: XLSX.WorkSheet, p: CellRef, s: object) {
+  const cell = ensureCell(ws, p);
+  (cell as unknown as { s: object }).s = s;
 }
 
-// ─── Borders ───
-const thin = { style: 'thin', color: { rgb: '000000' } };
-const medium = { style: 'medium', color: { rgb: '000000' } };
-const bThin = { top: thin, bottom: thin, left: thin, right: thin };
-const bMedium = { top: medium, bottom: medium, left: medium, right: medium };
-const bThickBottom = { top: thin, bottom: medium, left: thin, right: thin };
+const signed = (t: Transaction) =>
+  t.type === "topup" ? t.amount : -t.amount;
 
-// ─── Styles ───
-const sTitle = {
-  font: { bold: true, sz: 14 },
-  alignment: { horizontal: 'center', vertical: 'center' },
-  border: bMedium,
-};
+/**
+ * Строит лист отчёта:
+ * заголовок, период, таблица (№, Дата, Категория, Сумма, Чек, Баланс), итоги.
+ */
+function buildSheet(rep: Report): XLSX.WorkSheet {
+  const txs = rep.transactions;
 
-const sPeriod = {
-  font: { sz: 10, italic: true },
-  alignment: { horizontal: 'center', vertical: 'center' },
-  border: bMedium,
-};
+  const title = "Отчёт о расходах";
+  const period = `Период: ${fmtDateTimeExcel(rep.startDate).slice(0, 10)} — ${fmtDateTimeExcel(
+    rep.endDate
+  ).slice(0, 10)}`;
 
-const sHeader = {
-  font: { bold: true, sz: 10 },
-  fill: { fgColor: { rgb: 'D9D9D9' } },
-  alignment: { horizontal: 'center', vertical: 'center' },
-  border: bMedium,
-};
-
-const sCell = (h: 'left' | 'center' | 'right', bold = false, bottomMedium = false) => ({
-  font: { sz: 10, bold },
-  alignment: { horizontal: h, vertical: 'center' as const },
-  border: bottomMedium ? bThickBottom : bThin,
-});
-
-const sSummaryLabel = {
-  font: { bold: true, sz: 11 },
-  alignment: { horizontal: 'right' as const, vertical: 'center' as const },
-  border: bThin,
-};
-
-const sSummaryValue = (sz = 11, bold = true) => ({
-  font: { bold, sz },
-  alignment: { horizontal: 'right' as const, vertical: 'center' as const },
-  border: bThin,
-});
-
-const sSummaryEmpty = { border: bThin };
-
-const sTotalLabel = {
-  font: { bold: true, sz: 12 },
-  alignment: { horizontal: 'right' as const, vertical: 'center' as const },
-  border: bMedium,
-  fill: { fgColor: { rgb: 'D9D9D9' } },
-};
-
-const sTotalValue = {
-  font: { bold: true, sz: 14 },
-  alignment: { horizontal: 'right' as const, vertical: 'center' as const },
-  border: bMedium,
-  fill: { fgColor: { rgb: 'D9D9D9' } },
-};
-
-const sTotalEmpty = { border: bMedium, fill: { fgColor: { rgb: 'D9D9D9' } } };
-
-export function generateReportExcel(
-  transactions: Transaction[],
-  totalTopup: number,
-  totalExpense: number,
-  finalBalance: number,
-  startDate: string,
-  endDate: string,
-): Blob {
-  const sorted = [...transactions].reverse();
-  const ws: XLSX.WorkSheet = {};
-
-  const ROW_HEADER = 3;
-  const ROW_DATA_START = 4;
-  const dataCount = sorted.length;
-  const isLastRow = (i: number) => i === dataCount - 1;
-  const ROW_SUMMARY_START = ROW_DATA_START + dataCount + 1;
-
-  // ─── Title ───
-  ws['A1'] = { v: 'Отчёт о расходах', t: 's', s: sTitle };
-  for (let c = 1; c <= 5; c++) ws[XLSX.utils.encode_cell({ r: 0, c })] = { v: '', t: 's', s: sTitle };
-
-  // ─── Period ───
-  ws['A2'] = { v: `Период: ${fmtDate(startDate)} — ${fmtDate(endDate)}`, t: 's', s: sPeriod };
-  for (let c = 1; c <= 5; c++) ws[XLSX.utils.encode_cell({ r: 1, c })] = { v: '', t: 's', s: sPeriod };
-
-  // ─── Header ───
-  ['№', 'Дата', 'Категория', 'Сумма', 'Чек', 'Баланс'].forEach((h, c) => {
-    ws[XLSX.utils.encode_cell({ r: ROW_HEADER, c })] = { v: h, t: 's', s: sHeader };
-  });
-
-  // ─── Data ───
-  sorted.forEach((t, i) => {
-    const r = ROW_DATA_START + i;
-    const last = isLastRow(i);
-    const isTopup = t.type === 'topup';
-
-    ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: i + 1, t: 'n', s: sCell('center', false, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: fmtDate(t.date), t: 's', s: sCell('center', false, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 2 })] = { v: t.category, t: 's', s: sCell('left', false, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 3 })] = { v: (isTopup ? '+' : '−') + fmtMoney(t.amount), t: 's', s: sCell('right', true, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: isTopup ? '—' : (t.hasReceipt ? 'Есть' : '—'), t: 's', s: sCell('center', false, last) };
-    ws[XLSX.utils.encode_cell({ r, c: 5 })] = { v: fmtMoney(t.balanceAfter), t: 's', s: sCell('right', true, last) };
-  });
-
-  // ─── Summary ───
-  const summaryRows: Array<{ label: string; value: string; isTotal: boolean }> = [
-    { label: 'Итого пополнено:', value: '+' + fmtMoney(totalTopup), isTotal: false },
-    { label: 'Итого расходов:', value: '−' + fmtMoney(totalExpense), isTotal: false },
-    { label: 'ОСТАТОК:', value: fmtMoney(finalBalance), isTotal: true },
-  ];
-  if (finalBalance < 0) {
-    summaryRows.push({ label: 'ДОЛГ:', value: fmtMoney(Math.abs(finalBalance)), isTotal: true });
-  }
-
-  summaryRows.forEach((row, i) => {
-    const r = ROW_SUMMARY_START + i;
-    if (row.isTotal) {
-      ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: '', t: 's', s: sTotalEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: '', t: 's', s: sTotalEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 2 })] = { v: row.label, t: 's', s: sTotalLabel };
-      ws[XLSX.utils.encode_cell({ r, c: 3 })] = { v: row.value, t: 's', s: sTotalValue };
-      ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: '', t: 's', s: sTotalEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 5 })] = { v: '', t: 's', s: sTotalEmpty };
-    } else {
-      ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: '', t: 's', s: sSummaryEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: '', t: 's', s: sSummaryEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 2 })] = { v: row.label, t: 's', s: sSummaryLabel };
-      ws[XLSX.utils.encode_cell({ r, c: 3 })] = { v: row.value, t: 's', s: sSummaryValue() };
-      ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: '', t: 's', s: sSummaryEmpty };
-      ws[XLSX.utils.encode_cell({ r, c: 5 })] = { v: '', t: 's', s: sSummaryEmpty };
-    }
-  });
-
-  // ─── Sheet config ───
-  const lastRow = ROW_SUMMARY_START + summaryRows.length - 1;
-  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 5 } });
-
-  ws['!cols'] = [
-    { wch: 5 },   // №
-    { wch: 12 },  // Дата
-    { wch: 28 },  // Категория
-    { wch: 18 },  // Сумма
-    { wch: 6 },   // Чек
-    { wch: 18 },  // Баланс
+  const HEAD_ROW = 3;
+  const rows: (string | number | null)[][] = [
+    [title],
+    [period],
+    [],
+    ["№", "Дата", "Категория", "Сумма, ₽", "Чек", "Баланс, ₽"],
   ];
 
-  ws['!rows'] = [
-    { hpt: 26 },  // Title
-    { hpt: 20 },  // Period
-    { hpt: 6 },   // Empty
-    { hpt: 22 },  // Header
+  txs.forEach((t, i) => {
+    rows.push([
+      i + 1,
+      fmtDateTimeExcel(t.date),
+      t.category,
+      signed(t),
+      t.type === "topup" ? "—" : t.hasReceipt ? "Есть" : "—",
+      t.balanceAfter,
+    ]);
+  });
+
+  rows.push([]);
+  const totalsStart = rows.length;
+  rows.push(["Пополнено", null, null, rep.totalTopup, null, null]);
+  rows.push(["Потрачено", null, null, -Math.abs(rep.totalExpense), null, null]);
+  const isDebt = rep.finalBalance < 0;
+  rows.push([
+    isDebt ? "Долг" : "Остаток",
+    null,
+    null,
+    rep.finalBalance,
+    null,
+    null,
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  ws["!cols"] = [
+    { wch: 4 },
+    { wch: 17 },
+    { wch: 24 },
+    { wch: 12 },
+    { wch: 7 },
+    { wch: 12 },
   ];
 
-  ws['!merges'] = [
+  ws["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
     { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+    ...[0, 1, 2].flatMap((k) => [
+      { s: { r: totalsStart + k, c: 0 }, e: { r: totalsStart + k, c: 2 } },
+      { s: { r: totalsStart + k, c: 3 }, e: { r: totalsStart + k, c: 5 } },
+    ]),
   ];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Отчёт');
+  style(ws, { r: 0, c: 0 }, S_TITLE);
+  style(ws, { r: 1, c: 0 }, S_PERIOD);
 
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  for (let c = 0; c < 6; c++) style(ws, { r: HEAD_ROW, c }, S_HEAD);
+
+  for (let i = 0; i < txs.length; i++) {
+    const r = HEAD_ROW + 1 + i;
+    style(ws, { r, c: 0 }, S_BODY_CENTER);
+    style(ws, { r, c: 1 }, S_BODY_CENTER);
+    style(ws, { r, c: 2 }, S_BODY);
+    const sumCell = ensureCell(ws, { r, c: 3 });
+    (sumCell as { s?: object }).s = {
+      ...S_BODY,
+      alignment: { horizontal: "right" },
+    };
+    sumCell.z = MONEY_FMT;
+    style(ws, { r, c: 4 }, S_BODY_CENTER);
+    const balCell = ensureCell(ws, { r, c: 5 });
+    (balCell as { s?: object }).s = {
+      ...S_BODY,
+      alignment: { horizontal: "right" },
+    };
+    balCell.z = MONEY_FMT;
+  }
+
+  for (let k = 0; k < 3; k++) {
+    const r = totalsStart + k;
+    for (let c = 0; c < 3; c++) style(ws, { r, c }, S_TOTAL_LABEL);
+    for (let c = 3; c < 6; c++) style(ws, { r, c }, S_TOTAL_VALUE);
+    const v = ensureCell(ws, { r, c: 3 });
+    v.z = MONEY_FMT;
+  }
+
+  (ws as unknown as { "!pageSetup": object })["!pageSetup"] = {
+    orientation: "portrait",
+    fitToWidth: 1,
+    fitToHeight: 0,
+  };
+
+  return ws;
 }
 
-export async function shareReport(
-  transactions: Transaction[],
-  totalTopup: number,
-  totalExpense: number,
-  finalBalance: number,
-  startDate: string,
-  endDate: string,
-) {
-  const blob = generateReportExcel(transactions, totalTopup, totalExpense, finalBalance, startDate, endDate);
-  const fileName = buildFileName(startDate, endDate);
+function buildWorkbook(rep: Report): ArrayBuffer {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, buildSheet(rep), "Отчёт");
+  return XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+}
 
-  if (navigator.share && navigator.canShare) {
-    const file = new File([blob], fileName, { type: blob.type });
-    const shareData: ShareData = { files: [file] };
-    if (navigator.canShare(shareData)) {
-      try { await navigator.share(shareData); return; } catch {}
+export type ShareResult = "shared" | "downloaded" | "cancelled";
+
+/** Делится .xlsx через iOS Share Sheet, иначе — скачивает файл. */
+export async function shareReportXlsx(rep: Report): Promise<ShareResult> {
+  const name = reportFileName(rep.startDate, rep.endDate);
+
+  // 1. Генерация файла — в защите, чтобы точно понимать отказ
+  let file: File;
+  try {
+    const out = buildWorkbook(rep);
+    file = new File([out], name, { type: XLSX_MIME });
+  } catch (err) {
+    console.error("[Отчёт] Не удалось собрать Excel:", err);
+    throw err;
+  }
+
+  // 2. Системный шаринг (Web Share Level 2), если поддерживается
+  const supportsShare =
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    typeof navigator.share === "function";
+
+  if (supportsShare) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        // ВАЖНО: передаём только files. Любые title/text iOS превращает
+        // в отдельный текстовый файл рядом с .xlsx
+        await navigator.share({ files: [file] });
+        return "shared";
+      }
+    } catch (err) {
+      // Явная отмена пользователем — не считаем ошибкой и не качаем файл
+      if ((err as Error)?.name === "AbortError") return "cancelled";
+      console.warn("[Отчёт] Share Sheet отказал, ухожу в скачивание:", err);
     }
   }
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = fileName; a.click();
-  URL.revokeObjectURL(url);
+  // 3. Fallback — обычное скачивание
+  downloadBlob(file, name);
+  return "downloaded";
+}
+
+/** JSON-бэкап всех данных: Share Sheet либо скачивание. */
+export async function shareJsonBackup(data: unknown): Promise<ShareResult> {
+  const name = backupFileName();
+  const file = new File([JSON.stringify(data, null, 2)], name, {
+    type: "application/json",
+  });
+
+  if (
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    typeof navigator.share === "function"
+  ) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        // только files — без title, иначе iOS добавит текстовый файл
+        await navigator.share({ files: [file] });
+        return "shared";
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return "cancelled";
+      console.warn("[Отчёт] Share Sheet отказал, ухожу в скачивание:", err);
+    }
+  }
+
+  downloadBlob(file, name);
+  return "downloaded";
 }
