@@ -1,32 +1,74 @@
-import { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { CircleDollarSign } from "lucide-react";
+import { Sheet } from "./ui";
+import { formatMoney, parseAmount } from "../utils";
+import { useStore } from "../store";
 
-interface Props { onClose: () => void; onTopup: (amount: number) => void; }
-
-export default function TopupModal({ onClose, onTopup }: Props) {
-  const [amount, setAmount] = useState('');
-  const panelRef = useRef<HTMLDivElement>(null);
+export function TopupModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { addTopup } = useStore();
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const handler = () => { if (panelRef.current) panelRef.current.style.paddingBottom = `${window.innerHeight - vv.height}px`; };
-    vv.addEventListener('resize', handler); vv.addEventListener('scroll', handler);
-    return () => { vv.removeEventListener('resize', handler); vv.removeEventListener('scroll', handler); };
-  }, []);
+    if (open) {
+      setValue("");
+      const t = window.setTimeout(() => inputRef.current?.focus(), 380);
+      return () => window.clearTimeout(t);
+    }
+  }, [open]);
 
-  const handleSubmit = () => { const val = parseFloat(amount); if (val > 0) { onTopup(val); onClose(); } };
+  const amount = parseAmount(value);
+
+  const confirm = () => {
+    if (!amount) return;
+    addTopup(amount);
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-start justify-center overflow-y-auto" onClick={onClose}>
-      <div ref={panelRef} className="bg-white/80 backdrop-blur-2xl w-full max-w-md rounded-[20px] p-6 animate-slide-up mt-20 mx-4 mb-4 border border-white/60 shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-[17px] font-bold text-[#1c1c1e]">Пополнение баланса</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#e5e5ea]/80 active:bg-[#d1d1d6] transition"><X size={16} className="text-[#8e8e93]" /></button>
+    <Sheet open={open} onClose={onClose} title="Пополнить баланс">
+      <div className="px-5 pb-2 pt-2">
+        <div className="flex justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-pine/8 text-pine">
+            <CircleDollarSign size={24} strokeWidth={1.8} />
+          </div>
         </div>
-        <input type="number" inputMode="decimal" placeholder="Введите сумму" value={amount} onChange={e => setAmount(e.target.value)} className="w-full rounded-2xl px-4 py-3 text-lg font-medium mb-4 bg-[#e5e5ea]/50 placeholder:text-[#8e8e93] text-[#1c1c1e] focus:outline-none focus:ring-2 focus:ring-[#34c759]/40 border border-white/50 transition" autoFocus />
-        <button onClick={handleSubmit} disabled={!amount || parseFloat(amount) <= 0} className="w-full bg-[#34c759] text-white py-3 rounded-2xl font-semibold text-[17px] disabled:opacity-30 transition active:scale-[0.97] shadow-sm shadow-green-300/40">Пополнить</button>
+
+        <div className="mt-3 text-center">
+          <span className="micro font-mono text-muted">Сумма в рублях</span>
+        </div>
+
+        <div className="mt-1 flex items-baseline justify-center gap-2 py-3">
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value.replace(/[^\d.,]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && confirm()}
+            inputMode="decimal"
+            placeholder="0"
+            aria-label="Сумма пополнения"
+            className="w-full max-w-[230px] bg-transparent text-center font-mono text-[52px] font-bold leading-none tracking-tight text-ink outline-none"
+          />
+          <span className="font-mono text-[24px] font-bold text-pine">₽</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={confirm}
+          disabled={!amount}
+          className={`mt-4 w-full rounded-2xl py-4 font-display text-[16px] font-extrabold transition active:scale-[0.98] ${
+            amount ? "pine-glow bg-pine text-card" : "bg-tint text-muted"
+          }`}
+        >
+          Пополнить{amount ? ` на ${formatMoney(amount)}` : ""}
+        </button>
       </div>
-    </div>
+    </Sheet>
   );
 }

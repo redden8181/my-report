@@ -1,223 +1,450 @@
-import { useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, Info, Plus, X } from 'lucide-react';
-import { useStore, APP_VERSION, BUILD_DATE, DEFAULT_CATEGORIES, DEFAULT_HINTS } from '../store';
-import type { AppData } from '../types';
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  Download,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { useStore } from "../store";
+import { BUILD_DATE, DEFAULT_CATEGORIES } from "../utils";
+import { APP_VERSION } from "../types";
+import { shareJsonBackup } from "../exportExcel";
+import { ScreenHead, SectionTitle, Sheet, useToast } from "./ui";
 
-interface Props { onBack: () => void; }
+/* ================= быстрые категории ================= */
 
-export default function Settings({ onBack }: Props) {
-  const { state, dispatch } = useStore();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [newCat, setNewCat] = useState('');
-  const [editingHints, setEditingHints] = useState<string | null>(null);
-  const [newHint, setNewHint] = useState('');
+function CategoriesEditor() {
+  const { data, setCategories } = useStore();
+  const [draft, setDraft] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [ordering, setOrdering] = useState(false);
+  const resetTimer = useRef<number | undefined>(undefined);
+  const list = data.quickCategories;
 
-  const handleExportData = () => {
-    const data: AppData = { version: APP_VERSION, balance: state.balance, transactions: state.transactions, reports: state.reports, quickCategories: state.quickCategories, categoryHints: state.categoryHints };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const now = new Date();
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    const fileName = `отчет_${dd}-${mm}-${yyyy}_${hh}-${min}.json`;
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = fileName; a.click(); URL.revokeObjectURL(url);
-  };
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => { try { const data: AppData = JSON.parse(ev.target?.result as string); if (data.transactions && data.reports !== undefined) { dispatch({ type: 'LOAD_DATA', data }); alert('Данные успешно загружены!'); } else alert('Неверный формат файла'); } catch { alert('Ошибка при чтении файла'); } };
-    reader.readAsText(file); if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  // нечего сортировать — выходим из режима порядка
+  useEffect(() => {
+    if (list.length < 2 && ordering) setOrdering(false);
+  }, [list.length, ordering]);
 
-  const addCategory = () => {
-    const name = newCat.trim();
-    if (name && !state.quickCategories.includes(name)) {
-      dispatch({ type: 'SET_CATEGORIES', categories: [...state.quickCategories, name] });
-      setNewCat('');
+  const add = () => {
+    const name = draft.trim();
+    if (!name) return;
+    if (list.some((c) => c.toLowerCase() === name.toLowerCase())) {
+      setDraft("");
+      return;
     }
+    setCategories([...list, name]);
+    setDraft("");
   };
 
-  const removeCategory = (cat: string) => {
-    dispatch({ type: 'SET_CATEGORIES', categories: state.quickCategories.filter(c => c !== cat) });
-    dispatch({ type: 'SET_HINTS', category: cat, hints: [] });
-    if (editingHints === cat) setEditingHints(null);
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    const next = [...list];
+    [next[i], next[j]] = [next[j], next[i]];
+    setCategories(next);
   };
 
-  const moveCategory = (idx: number, dir: -1 | 1) => {
-    const ni = idx + dir;
-    if (ni < 0 || ni >= state.quickCategories.length) return;
-    const arr = [...state.quickCategories];
-    [arr[idx], arr[ni]] = [arr[ni], arr[idx]];
-    dispatch({ type: 'SET_CATEGORIES', categories: arr });
+  const remove = (i: number) => {
+    setCategories(list.filter((_, idx) => idx !== i));
   };
 
-  const resetAll = () => {
-    dispatch({ type: 'SET_CATEGORIES', categories: DEFAULT_CATEGORIES });
-    // Reset hints to defaults
-    for (const cat of Object.keys(state.categoryHints)) {
-      if (!DEFAULT_HINTS[cat]) dispatch({ type: 'SET_HINTS', category: cat, hints: [] });
+  const reset = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(
+        () => setConfirmReset(false),
+        2500
+      );
+      return;
     }
-    for (const [cat, hints] of Object.entries(DEFAULT_HINTS)) {
-      dispatch({ type: 'SET_HINTS', category: cat, hints });
-    }
-  };
-
-  const addHint = (cat: string) => {
-    const val = parseInt(newHint);
-    if (val > 0) {
-      const current = state.categoryHints[cat] || [];
-      if (!current.includes(val)) {
-        dispatch({ type: 'SET_HINTS', category: cat, hints: [...current, val].sort((a, b) => a - b) });
-      }
-      setNewHint('');
-    }
-  };
-
-  const removeHint = (cat: string, val: number) => {
-    const current = state.categoryHints[cat] || [];
-    dispatch({ type: 'SET_HINTS', category: cat, hints: current.filter(h => h !== val) });
-  };
-
-  const formatBuildDate = () => {
-    try {
-      const d = new Date(BUILD_DATE);
-      if (isNaN(d.getTime())) return BUILD_DATE;
-      return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch { return BUILD_DATE; }
+    setCategories([...DEFAULT_CATEGORIES]);
+    setConfirmReset(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#f2f2f7]">
-      <div className="sticky top-0 z-10 bg-[#f2f2f7]/70 backdrop-blur-2xl border-b border-white/60">
-        <div className="max-w-lg mx-auto flex items-center justify-between px-4 py-2.5">
-          <button onClick={onBack} className="flex items-center gap-1 text-[#007aff] active:opacity-60 transition"><ArrowLeft size={20} /><span className="text-[15px] font-medium">Назад</span></button>
-          <h1 className="font-semibold text-[#1c1c1e] text-[15px]">Настройки</h1>
-          <div className="w-16" />
-        </div>
+    <div className="panel mx-4 overflow-hidden rounded-[24px]">
+      {/* шапка со счётчиком и переключателем режима порядка */}
+      <div className="flex items-center justify-between gap-2 border-b border-dashed border-edge px-4 py-3">
+        <span className="micro font-mono text-muted">
+          {list.length} шт.
+        </span>
+        <button
+          type="button"
+          onClick={() => setOrdering((v) => !v)}
+          disabled={list.length < 2}
+          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition active:scale-95 disabled:opacity-40 ${
+            ordering
+              ? "border-transparent bg-pine text-card"
+              : "border-edge bg-tint text-ink"
+          }`}
+        >
+          {ordering ? (
+            <Check size={13} strokeWidth={3} />
+          ) : (
+            <ArrowUpDown size={13} strokeWidth={2.8} />
+          )}
+          {ordering ? "Готово" : "Порядок"}
+        </button>
       </div>
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
 
-        {/* ═══ Quick Categories ═══ */}
-        <div>
-          <h2 className="text-[11px] font-semibold text-[#8e8e93] uppercase tracking-wider mb-2 px-1">Быстрые категории</h2>
-          <div className="bg-white/70 backdrop-blur-xl rounded-[16px] border border-white/80 overflow-hidden">
-            {state.quickCategories.map((cat, i) => (
-              <div key={cat}>
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#c6c6c8]/20">
-                  {/* Move arrows */}
-                  <div className="flex flex-col gap-0.5">
-                    <button onClick={() => moveCategory(i, -1)} disabled={i === 0} className="text-[#8e8e93] disabled:opacity-20 active:text-[#007aff] transition">
-                      <svg width="12" height="7" viewBox="0 0 12 7" fill="none"><path d="M1 6L6 1L11 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    <button onClick={() => moveCategory(i, 1)} disabled={i === state.quickCategories.length - 1} className="text-[#8e8e93] disabled:opacity-20 active:text-[#007aff] transition">
-                      <svg width="12" height="7" viewBox="0 0 12 7" fill="none"><path d="M1 1L6 6L11 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                  </div>
-
-                  {/* Name + hints count */}
-                  <button onClick={() => setEditingHints(editingHints === cat ? null : cat)} className="flex-1 text-left active:opacity-60 transition">
-                    <span className="text-[15px] text-[#1c1c1e] font-medium">{cat}</span>
-                    {state.categoryHints[cat] && state.categoryHints[cat].length > 0 && (
-                      <span className="ml-2 text-[11px] text-[#8e8e93]">
-                        ({state.categoryHints[cat].length} подсказ.)
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Delete */}
-                  <button onClick={() => removeCategory(cat)} className="w-7 h-7 flex items-center justify-center rounded-full bg-[#ff3b30]/10 active:bg-[#ff3b30]/20 transition">
-                    <X size={14} className="text-[#ff3b30]" />
-                  </button>
-                </div>
-
-                {/* Hints editor for this category */}
-                {editingHints === cat && (
-                  <div className="px-4 py-3 bg-[#f2f2f7]/50 border-b border-[#c6c6c8]/20">
-                    <p className="text-[11px] text-[#8e8e93] font-semibold uppercase tracking-wider mb-2">Подсказки сумм для «{cat}»</p>
-                    
-                    {/* Current hints */}
-                    {state.categoryHints[cat] && state.categoryHints[cat].length > 0 ? (
-                      <div className="flex gap-1.5 flex-wrap mb-2">
-                        {state.categoryHints[cat].map(val => (
-                          <div key={val} className="flex items-center gap-1 bg-white rounded-lg px-2.5 py-1.5 border border-[#c6c6c8]/30">
-                            <span className="text-[13px] font-medium text-[#1c1c1e]">{val} ₽</span>
-                            <button onClick={() => removeHint(cat, val)} className="active:opacity-60 transition">
-                              <X size={12} className="text-[#ff3b30]" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[12px] text-[#c7c7cc] mb-2">Нет подсказок</p>
-                    )}
-
-                    {/* Add hint */}
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        placeholder="Сумма..."
-                        value={newHint}
-                        onChange={e => setNewHint(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') addHint(cat); }}
-                        className="flex-1 rounded-lg px-3 py-2 text-[14px] bg-white border border-[#c6c6c8]/30 text-[#1c1c1e] placeholder:text-[#c7c7cc] focus:outline-none focus:border-[#007aff]/50"
-                      />
-                      <button
-                        onClick={() => addHint(cat)}
-                        disabled={!newHint || parseInt(newHint) <= 0}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-[#34c759] disabled:opacity-30 active:scale-95 transition self-center"
-                      >
-                        <Plus size={14} className="text-white" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+      <div className="divide-y divide-dashed divide-edge">
+        {list.map((c, i) => (
+          <div key={c} className="flex items-center gap-2 px-3 py-2.5">
+            {ordering && (
+              <div className="fade-up flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  onClick={() => move(i, -1)}
+                  disabled={i === 0}
+                  aria-label={`Поднять ${c}`}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-edge bg-tint text-ink transition active:scale-90 disabled:opacity-25"
+                >
+                  <ArrowUp size={16} strokeWidth={2.8} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(i, 1)}
+                  disabled={i === list.length - 1}
+                  aria-label={`Опустить ${c}`}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-edge bg-tint text-ink transition active:scale-90 disabled:opacity-25"
+                >
+                  <ArrowDown size={16} strokeWidth={2.8} />
+                </button>
               </div>
-            ))}
-
-            {/* Add new category */}
-            <div className="flex items-center gap-2 px-4 py-2.5">
-              <input type="text" placeholder="Новая категория..." value={newCat} onChange={e => setNewCat(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCategory(); }} className="flex-1 text-[15px] bg-transparent placeholder:text-[#c7c7cc] text-[#1c1c1e] focus:outline-none" />
-              <button onClick={addCategory} disabled={!newCat.trim() || state.quickCategories.includes(newCat.trim())} className="w-7 h-7 flex items-center justify-center rounded-full bg-[#34c759] disabled:opacity-30 active:scale-95 transition">
-                <Plus size={14} className="text-white" />
+            )}
+            <div className="min-w-0 flex-1 truncate px-1.5 text-[15px] font-medium text-ink">
+              {c}
+            </div>
+            {!ordering && (
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                aria-label={`Удалить ${c}`}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/60 transition active:scale-90 active:text-burn"
+              >
+                <Trash2 size={16} strokeWidth={2.2} />
               </button>
-            </div>
+            )}
+          </div>
+        ))}
+        {list.length === 0 && (
+          <div className="px-4 py-5 text-center text-[13px] text-muted">
+            Категории удалены — добавьте свои ниже
+          </div>
+        )}
+      </div>
+
+      {!ordering && (
+        <>
+          <div className="flex items-center gap-2 border-t border-dashed border-edge p-3">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+              placeholder="Новая категория"
+              className="min-w-0 flex-1 rounded-xl border border-edge bg-tint px-3.5 py-3 text-[16px] text-ink outline-none transition focus:border-pine/50 focus:bg-card"
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={!draft.trim()}
+              aria-label="Добавить категорию"
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition active:scale-95 ${
+                draft.trim()
+                  ? "pine-glow bg-pine text-card"
+                  : "bg-tint text-muted"
+              }`}
+            >
+              <Plus size={20} strokeWidth={2.8} />
+            </button>
           </div>
 
-          <button onClick={resetAll} className="mt-2 text-[13px] text-[#007aff] px-1 active:opacity-60 transition">
-            Сбросить по умолчанию
+          <button
+            type="button"
+            onClick={reset}
+            className={`flex w-full items-center justify-center gap-2 border-t border-dashed border-edge py-3.5 text-[13px] font-bold transition ${
+              confirmReset ? "text-burn" : "text-muted"
+            }`}
+          >
+            <RotateCcw size={14} strokeWidth={2.6} />
+            {confirmReset
+              ? "Нажмите ещё раз для сброса"
+              : "Сбросить по умолчанию"}
           </button>
-        </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-        {/* ═══ Data ═══ */}
-        <div>
-          <h2 className="text-[11px] font-semibold text-[#8e8e93] uppercase tracking-wider mb-2 px-1">Данные</h2>
-          <div className="bg-white/70 backdrop-blur-xl rounded-[16px] border border-white/80 overflow-hidden divide-y divide-[#c6c6c8]/25">
-            <button onClick={handleExportData} className="w-full flex items-center gap-3 p-4 text-left active:bg-black/[0.03] transition">
-              <div className="w-10 h-10 bg-[#34c759] rounded-[10px] flex items-center justify-center shadow-sm"><Download size={20} className="text-white" /></div>
-              <div><p className="font-semibold text-[#1c1c1e] text-[15px]">Сохранить данные</p><p className="text-[12px] text-[#8e8e93] mt-0.5">Экспорт в JSON файл</p></div>
-            </button>
-            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 p-4 text-left active:bg-black/[0.03] transition">
-              <div className="w-10 h-10 bg-[#007aff] rounded-[10px] flex items-center justify-center shadow-sm"><Upload size={20} className="text-white" /></div>
-              <div><p className="font-semibold text-[#1c1c1e] text-[15px]">Загрузить данные</p><p className="text-[12px] text-[#8e8e93] mt-0.5">Импорт из JSON файла</p></div>
-            </button>
-          </div>
-          <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportData} className="hidden" />
-        </div>
+/* ================= подсказки сумм ================= */
 
-        {/* ═══ Version ═══ */}
-        <div className="bg-white/70 backdrop-blur-xl rounded-[16px] border border-white/80 overflow-hidden">
-          <div className="flex items-center gap-3 p-4">
-            <div className="w-10 h-10 bg-[#8e8e93] rounded-[10px] flex items-center justify-center shadow-sm"><Info size={20} className="text-white" /></div>
-            <div>
-              <p className="font-semibold text-[#1c1c1e] text-[15px]">Версия</p>
-              <p className="text-[13px] text-[#8e8e93] font-mono">v{APP_VERSION}</p>
-              <p className="text-[11px] text-[#c7c7cc] mt-0.5">Сборка: {formatBuildDate()}</p>
+function HintsEditor() {
+  const { data, setHints } = useStore();
+  const cats = data.quickCategories;
+  const [active, setActive] = useState<string>(cats[0] ?? "");
+  const [draft, setDraft] = useState("");
+
+  const currentCat = cats.includes(active) ? active : (cats[0] ?? null);
+  const hints = currentCat ? (data.categoryHints[currentCat] ?? []) : [];
+
+  const add = () => {
+    if (!currentCat) return;
+    const n = parseInt(draft, 10);
+    setDraft("");
+    if (!Number.isFinite(n) || n <= 0) return;
+    setHints(currentCat, [...hints, n]);
+  };
+
+  const remove = (n: number) => {
+    if (!currentCat) return;
+    setHints(
+      currentCat,
+      hints.filter((h) => h !== n)
+    );
+  };
+
+  if (cats.length === 0) return null;
+
+  return (
+    <div className="panel mx-4 rounded-[24px] p-4">
+      <div className="grid grid-cols-2 gap-2">
+        {cats.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setActive(c)}
+            className={`min-w-0 rounded-xl border px-3 py-2.5 text-[13px] font-bold leading-tight transition active:scale-95 ${
+              currentCat === c
+                ? "border-transparent bg-pine text-card"
+                : "border-edge bg-tint text-ink"
+            }`}
+          >
+            <span className="block truncate">{c}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {hints.map((h) => (
+          <span
+            key={h}
+            className="flex items-center gap-1 rounded-full bg-pine/8 py-1.5 pl-3 pr-1.5 font-mono text-[12px] font-bold text-pine"
+          >
+            {h}
+            <button
+              type="button"
+              onClick={() => remove(h)}
+              aria-label={`Удалить ${h}`}
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-card text-muted transition active:scale-90"
+            >
+              <X size={11} strokeWidth={3} />
+            </button>
+          </span>
+        ))}
+        {hints.length === 0 && (
+          <span className="text-[12px] text-muted">
+            Подсказок нет — суммы будут показаны при добавлении расхода
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          inputMode="numeric"
+          placeholder="Сумма, например 500"
+          className="min-w-0 flex-1 rounded-xl border border-edge bg-tint px-3.5 py-3 font-mono text-[16px] text-ink outline-none transition focus:border-pine/50 focus:bg-card"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!draft.trim()}
+          aria-label="Добавить подсказку"
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition active:scale-95 ${
+            draft.trim() ? "pine-glow bg-pine text-card" : "bg-tint text-muted"
+          }`}
+        >
+          <Plus size={20} strokeWidth={2.8} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ================= данные (бэкап) ================= */
+
+interface PendingImport {
+  raw: unknown;
+  txCount: number;
+  reportCount: number;
+}
+
+function DataSection() {
+  const { data, importData } = useStore();
+  const { show, node } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<PendingImport | null>(null);
+
+  const exportJson = async () => {
+    try {
+      const res = await shareJsonBackup(data);
+      if (res === "shared") show("Бэкап отправлен");
+      else if (res === "downloaded") show("Бэкап сохранён в файлы");
+      else show("Отправка отменена");
+    } catch {
+      show("Не удалось экспортировать", "error");
+    }
+  };
+
+  const onPick = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text);
+      if (!raw || typeof raw !== "object" || !("transactions" in raw)) {
+        throw new Error("bad");
+      }
+      const r = raw as Record<string, unknown>;
+      setPending({
+        raw,
+        txCount: Array.isArray(r.transactions) ? r.transactions.length : 0,
+        reportCount: Array.isArray(r.reports) ? r.reports.length : 0,
+      });
+    } catch {
+      show("Файл не похож на бэкап «Отчёта»", "error");
+    }
+  };
+
+  const applyImport = () => {
+    if (!pending) return;
+    importData(pending.raw);
+    setPending(null);
+    show("Данные восстановлены");
+  };
+
+  return (
+    <div className="panel mx-4 overflow-hidden rounded-[24px]">
+      <button
+        type="button"
+        onClick={exportJson}
+        className="flex w-full items-center gap-3 px-4 py-4 text-left transition active:bg-tint/70"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pine/8 text-pine">
+          <Download size={18} strokeWidth={2.2} />
+        </span>
+        <span className="flex-1">
+          <span className="block text-[14px] font-bold text-ink">
+            Экспорт данных
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted">
+            JSON-бэкап: баланс, операции, отчёты, настройки
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="flex w-full items-center gap-3 border-t border-dashed border-edge px-4 py-4 text-left transition active:bg-tint/70"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pine/8 text-pine">
+          <Upload size={18} strokeWidth={2.2} />
+        </span>
+        <span className="flex-1">
+          <span className="block text-[14px] font-bold text-ink">
+            Импорт данных
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted">
+            Восстановление из JSON-бэкапа
+          </span>
+        </span>
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={(e) => {
+          void onPick(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+
+      <Sheet
+        open={!!pending}
+        onClose={() => setPending(null)}
+        title="Восстановить бэкап?"
+      >
+        {pending && (
+          <div className="px-5 pb-2 pt-1">
+            <div className="rounded-2xl border border-edge bg-tint p-4 text-[13px] leading-relaxed text-muted">
+              Из файла будет загружено:{" "}
+              <span className="font-mono text-[12px] font-bold text-ink">
+                {pending.txCount} операций, {pending.reportCount} отчётов
+              </span>
+              .<br />
+              Текущие данные на устройстве будут заменены.
             </div>
+            <button
+              type="button"
+              onClick={applyImport}
+              className="pine-glow mt-4 w-full rounded-2xl bg-pine py-4 font-display text-[15px] font-extrabold text-card transition active:scale-[0.98]"
+            >
+              Восстановить
+            </button>
+            <button
+              type="button"
+              onClick={() => setPending(null)}
+              className="mt-2 w-full rounded-2xl py-3 text-[14px] font-medium text-muted"
+            >
+              Отмена
+            </button>
           </div>
+        )}
+      </Sheet>
+      {node}
+    </div>
+  );
+}
+
+/* ================= экран ================= */
+
+export function Settings() {
+  return (
+    <div className="fade-up pb-2">
+      <ScreenHead
+        kicker="Управление"
+        title="Настройки"
+        sub="Категории, подсказки и резервные копии"
+      />
+
+      <SectionTitle>Быстрые категории</SectionTitle>
+      <CategoriesEditor />
+
+      <SectionTitle>Подсказки сумм</SectionTitle>
+      <HintsEditor />
+
+      <SectionTitle>Данные</SectionTitle>
+      <DataSection />
+
+      <div className="mt-9 px-5 text-center">
+        <div className="font-mono text-[11px] font-bold text-muted">
+          ОТЧЁТ · v{APP_VERSION} · сборка {BUILD_DATE}
+        </div>
+        <div className="mt-1 text-[11px] text-muted/70">
+          Все данные хранятся локально на этом устройстве
         </div>
       </div>
     </div>

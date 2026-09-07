@@ -1,143 +1,422 @@
-import React, { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
-import type { Transaction, Report, AppData } from './types';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  type ReactNode,
+} from "react";
+import {
+  APP_VERSION,
+  type AppState,
+  type Report,
+  type Transaction,
+} from "./types";
+import {
+  DEFAULT_CATEGORIES,
+  STORAGE_KEY,
+  chronological,
+  round2,
+  uid,
+} from "./utils";
 
-function uuidv4(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+/* ============ вычисления ============ */
+
+/**
+ * Пересчёт balanceAfter. Операции предварительно выстраиваются строго
+ * по дате (старые → новые), чтобы порядок не «гулял» в отчётах и Excel.
+ */
+function recalcTxs(txs: Transaction[]): Transaction[] {
+  return chronological(txs);
 }
 
-export const APP_VERSION = '1.2.0';
+const lastBalance = (txs: Transaction[]): number =>
+  txs.length ? txs[txs.length - 1].balanceAfter : 0;
 
-// Build date: injected by Vite at build time, fallback to current date
-const rawBuildDate = import.meta.env.VITE_BUILD_DATE as string | undefined;
-export const BUILD_DATE = rawBuildDate || new Date().toISOString();
-
-export const DEFAULT_CATEGORIES = ['АЗС', 'Мойка', 'Парковка', 'Платка', 'Аптека', 'Магазин'];
-export const DEFAULT_HINTS: Record<string, number[]> = {
-  'Парковка': [150, 380, 450, 600, 800],
-};
-
-interface State {
-  balance: number;
-  transactions: Transaction[];
-  reports: Report[];
-  quickCategories: string[];
-  categoryHints: Record<string, number[]>;
+function makeTx(
+  patch: Omit<Transaction, "id" | "date" | "balanceAfter">,
+  date = new Date().toISOString()
+): Transaction {
+  return { ...patch, id: uid(), date, balanceAfter: 0 };
 }
+
+/* ============ нормализация / миграция данных ============ */
+
+function fixTransaction(raw: unknown): Transaction | null {
+  if (!raw || typeof raw !== "object") return null;
+  const t = raw as Record<string, unknown>;
+  const amount = Number(t.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const type = t.type === "topup" ? "topup" : "expense";
+  let date = typeof t.date === "string" ? t.date : "";
+  if (Number.isNaN(new Date(date).getTime())) date = new Date().toISOString();
+  return {
+    id: typeof t.id === "string" && t.id ? t.id : uid(),
+    type,
+    category:
+      typeof t.category === "string" && t.category.trim()
+        ? t.category.trim()
+        : "Прочее",
+    amount: round2(Math.abs(amount)),
+    hasReceipt: Boolean(t.hasReceipt),
+    date,
+    balanceAfter: 0,
+  };
+}
+
+function fixReport(raw: unknown): Report | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const txs = (Array.isArray(r.transactions) ? r.transactions : [])
+    .map(fixTransaction)
+    .filter((t): t is Transaction => t !== null);
+  const fixed = recalcTxs(txs);
+  const totalTopup = round2(
+    fixed.filter((t) => t.type === "topup").reduce((s, t) => s + t.amount, 0)
+  );
+  const totalExpense = round2(
+    fixed.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0)
+  );
+  const now = new Date().toISOString();
+  return {
+    id: typeof r.id === "string" && r.id ? r.id : uid(),
+    transactions: fixed,
+    totalTopup,
+    totalExpense,
+    finalBalance: lastBalance(fixed),
+    startDate:
+      typeof r.startDate === "string" && r.startDate
+        ? r.startDate
+        : fixed[0]?.date ?? now,
+    endDate:
+      typeof r.endDate === "string" && r.endDate
+        ? r.endDate
+        : fixed.at(-1)?.date ?? now,
+  };
+}
+
+/** Приводит произвольный (например, импортированный) объект к AppState. */
+export function normalizeData(raw: unknown): AppState {
+  const data = (raw ?? {}) as Record<string, unknown>;
+
+  const transactions = recalcTxs(
+    (Array.isArray(data.transactions) ? data.transactions : [])
+      .map(fixTransaction)
+      .filter((t): t is Transaction => t !== null)
+  );
+
+  const reports = (Array.isArray(data.reports) ? data.reports : [])
+    .map(fixReport)
+    .filter((r): r is Report => r !== null);
+
+  let quickCategories = Array.isArray(data.quickCategories)
+    ? (data.quickCategories as unknown[])
+        .filter((c): c is string => typeof c === "string" && !!c.trim())
+        .map((c) => c.trim())
+    : [];
+  quickCategories = [...new Set(quickCategories)];
+  if (quickCategories.length === 0) quickCategories = [...DEFAULT_CATEGORIES];
+
+  const categoryHints: Record<string, number[]> = {};
+  const rawHints = data.categoryHints;
+  if (rawHints && typeof rawHints === "object") {
+    for (const [key, value] of Object.entries(
+      rawHints as Record<string, unknown>
+    )) {
+      if (!Array.isArray(value)) continue;
+      const nums = value
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .map(round2);
+      if (nums.length) categoryHints[key] = [...new Set(nums)];
+    }
+  }
+
+  return {
+    version: APP_VERSION,
+    balance: lastBalance(transactions),
+    transactions,
+    reports,
+    quickCategories,
+    categoryHints,
+  };
+}
+
+function loadInitial(): AppState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return normalizeData(JSON.parse(raw));
+  } catch {
+    /* повреждённые данные — стартуем чисто */
+  }
+  return normalizeData(null);
+}
+
+/* ============ reducer ============ */
 
 type Action =
-  | { type: 'TOPUP'; amount: number }
-  | { type: 'ADD_EXPENSE'; category: string; amount: number; hasReceipt: boolean }
-  | { type: 'EDIT_TRANSACTION'; id: string; category: string; amount: number; hasReceipt: boolean }
-  | { type: 'DELETE_TRANSACTION'; id: string }
-  | { type: 'NEW_REPORT' }
-  | { type: 'LOAD_DATA'; data: AppData }
-  | { type: 'SET_CATEGORIES'; categories: string[] }
-  | { type: 'SET_HINTS'; category: string; hints: number[] }
-  | { type: 'SET_STATE'; state: State };
+  | { type: "ADD_TOPUP"; amount: number }
+  | {
+      type: "ADD_EXPENSE";
+      category: string;
+      amount: number;
+      hasReceipt: boolean;
+    }
+  | {
+      type: "UPDATE_TX";
+      id: string;
+      patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>;
+    }
+  | { type: "DELETE_TX"; id: string }
+  | { type: "CLOSE_REPORT"; carryOver: boolean }
+  | { type: "SET_CATEGORIES"; list: string[] }
+  | { type: "SET_HINTS"; category: string; hints: number[] }
+  | { type: "IMPORT"; data: unknown };
 
-function recalculateBalances(transactions: Transaction[], startBalance: number): Transaction[] {
-  let running = startBalance;
-  const reversed = [...transactions].reverse();
-  const result: Transaction[] = [];
-  for (const t of reversed) {
-    if (t.type === 'topup') running += t.amount; else running -= t.amount;
-    result.push({ ...t, balanceAfter: running });
-  }
-  return result.reverse();
-}
-
-function reducer(state: State, action: Action): State {
+function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'TOPUP': {
-      const nb = state.balance + action.amount;
-      return { ...state, balance: nb, transactions: [{ id: uuidv4(), type: 'topup', category: 'Пополнение', amount: action.amount, hasReceipt: false, date: new Date().toISOString(), balanceAfter: nb }, ...state.transactions] };
+    case "ADD_TOPUP": {
+      const tx = {
+        ...makeTx({
+          type: "topup",
+          category: "Пополнение",
+          amount: action.amount,
+          hasReceipt: false,
+        }),
+        balanceAfter: round2(state.balance + action.amount),
+      };
+      return {
+        ...state,
+        transactions: [...state.transactions, tx],
+        balance: tx.balanceAfter,
+      };
     }
-    case 'ADD_EXPENSE': {
-      const nb = state.balance - action.amount;
-      return { ...state, balance: nb, transactions: [{ id: uuidv4(), type: 'expense', category: action.category, amount: action.amount, hasReceipt: action.hasReceipt, date: new Date().toISOString(), balanceAfter: nb }, ...state.transactions] };
+
+    case "ADD_EXPENSE": {
+      const tx = {
+        ...makeTx({
+          type: "expense",
+          category: action.category,
+          amount: action.amount,
+          hasReceipt: action.hasReceipt,
+        }),
+        balanceAfter: round2(state.balance - action.amount),
+      };
+      return {
+        ...state,
+        transactions: [...state.transactions, tx],
+        balance: tx.balanceAfter,
+      };
     }
-    case 'EDIT_TRANSACTION': {
-      const idx = state.transactions.findIndex(t => t.id === action.id);
-      if (idx === -1) return state;
-      const old = state.transactions[idx];
-      let diff = 0;
-      if (old.type === 'expense') diff = old.amount - action.amount;
-      else if (old.type === 'topup') diff = action.amount - old.amount;
-      let sb = state.balance;
-      for (const t of state.transactions) { if (t.type === 'topup') sb -= t.amount; else sb += t.amount; }
-      const updated = [...state.transactions];
-      updated[idx] = { ...old, category: action.category, amount: action.amount, hasReceipt: action.hasReceipt };
-      return { ...state, balance: state.balance + diff, transactions: recalculateBalances(updated, sb) };
+
+    case "UPDATE_TX": {
+      const txs = state.transactions.map((t) =>
+        t.id === action.id
+          ? {
+              ...t,
+              ...action.patch,
+              amount:
+                action.patch.amount !== undefined
+                  ? round2(Math.abs(action.patch.amount))
+                  : t.amount,
+            }
+          : t
+      );
+      const recalced = recalcTxs(txs);
+      return {
+        ...state,
+        transactions: recalced,
+        balance: lastBalance(recalced),
+      };
     }
-    case 'DELETE_TRANSACTION': {
-      const t = state.transactions.find(tr => tr.id === action.id);
-      if (!t) return state;
-      const nb = t.type === 'expense' ? state.balance + t.amount : state.balance - t.amount;
-      const rem = state.transactions.filter(tr => tr.id !== action.id);
-      let sb = nb; for (const tr of rem) { if (tr.type === 'topup') sb -= tr.amount; else sb += tr.amount; }
-      return { ...state, balance: nb, transactions: recalculateBalances(rem, sb) };
+
+    case "DELETE_TX": {
+      const recalced = recalcTxs(
+        state.transactions.filter((t) => t.id !== action.id)
+      );
+      return {
+        ...state,
+        transactions: recalced,
+        balance: lastBalance(recalced),
+      };
     }
-    case 'NEW_REPORT': {
+
+    case "CLOSE_REPORT": {
       if (state.transactions.length === 0) return state;
-      const tt = state.transactions.filter(t => t.type === 'topup').reduce((s, t) => s + t.amount, 0);
-      const te = state.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-      const dates = state.transactions.map(t => t.date);
-      const report: Report = { id: uuidv4(), transactions: [...state.transactions], totalTopup: tt, totalExpense: te, finalBalance: state.balance, startDate: dates[dates.length - 1], endDate: dates[0] };
-      const carry: Transaction[] = [];
-      if (state.balance !== 0) {
-        const debt = state.balance < 0;
-        carry.push({ id: uuidv4(), type: debt ? 'expense' : 'topup', category: debt ? 'Долг с прошлого отчёта' : 'Остаток с прошлого отчёта', amount: Math.abs(state.balance), hasReceipt: false, date: new Date().toISOString(), balanceAfter: state.balance });
+      const txs = recalcTxs(state.transactions);
+      const totalTopup = round2(
+        txs.filter((t) => t.type === "topup").reduce((s, t) => s + t.amount, 0)
+      );
+      const totalExpense = round2(
+        txs
+          .filter((t) => t.type === "expense")
+          .reduce((s, t) => s + t.amount, 0)
+      );
+      const finalBalance = lastBalance(txs);
+      const report: Report = {
+        id: uid(),
+        transactions: txs,
+        totalTopup,
+        totalExpense,
+        finalBalance,
+        startDate: txs[0].date,
+        endDate: new Date().toISOString(),
+      };
+
+      let nextTxs: Transaction[] = [];
+      let nextBalance = 0;
+      if (action.carryOver && finalBalance !== 0) {
+        const carry = makeTx({
+          type: finalBalance > 0 ? "topup" : "expense",
+          category:
+            finalBalance > 0
+              ? "Остаток с прошлого отчёта"
+              : "Долг с прошлого отчёта",
+          amount: Math.abs(finalBalance),
+          hasReceipt: false,
+        });
+        carry.balanceAfter = finalBalance;
+        nextTxs = [carry];
+        nextBalance = finalBalance;
       }
-      return { ...state, transactions: carry, reports: [report, ...state.reports] };
+
+      return {
+        ...state,
+        transactions: nextTxs,
+        balance: nextBalance,
+        reports: [report, ...state.reports],
+      };
     }
-    case 'LOAD_DATA':
-      return { balance: action.data.balance ?? 0, transactions: action.data.transactions ?? [], reports: action.data.reports ?? [], quickCategories: action.data.quickCategories ?? DEFAULT_CATEGORIES, categoryHints: action.data.categoryHints ?? DEFAULT_HINTS };
-    case 'SET_CATEGORIES':
-      return { ...state, quickCategories: action.categories };
-    case 'SET_HINTS': {
-      const hints = { ...state.categoryHints };
-      if (action.hints.length === 0) delete hints[action.category];
-      else hints[action.category] = action.hints;
-      return { ...state, categoryHints: hints };
+
+    case "SET_CATEGORIES": {
+      const list = [...new Set(action.list.map((c) => c.trim()).filter(Boolean))];
+      const hints: Record<string, number[]> = {};
+      for (const c of list) if (state.categoryHints[c]) hints[c] = state.categoryHints[c];
+      return { ...state, quickCategories: list, categoryHints: hints };
     }
-    case 'SET_STATE':
-      return action.state;
+
+    case "SET_HINTS": {
+      const hints = [
+        ...new Set(
+          action.hints.filter((n) => Number.isFinite(n) && n > 0).map(round2)
+        ),
+      ];
+      const categoryHints = { ...state.categoryHints };
+      if (hints.length) categoryHints[action.category] = hints;
+      else delete categoryHints[action.category];
+      return { ...state, categoryHints };
+    }
+
+    case "IMPORT":
+      return normalizeData(action.data);
+
     default:
       return state;
   }
 }
 
-const initialState: State = { balance: 0, transactions: [], reports: [], quickCategories: DEFAULT_CATEGORIES, categoryHints: DEFAULT_HINTS };
+/* ============ контекст ============ */
 
-function loadState(): State {
-  try {
-    const saved = localStorage.getItem('otchet_app_data');
-    if (saved) {
-      const d = JSON.parse(saved);
-      if (d && typeof d.balance === 'number' && Array.isArray(d.transactions)) {
-        return { balance: d.balance, transactions: d.transactions, reports: Array.isArray(d.reports) ? d.reports : [], quickCategories: Array.isArray(d.quickCategories) ? d.quickCategories : DEFAULT_CATEGORIES, categoryHints: (d.categoryHints && typeof d.categoryHints === 'object') ? d.categoryHints : DEFAULT_HINTS };
-      }
-    }
-  } catch { localStorage.removeItem('otchet_app_data'); }
-  return initialState;
+interface StoreApi {
+  data: AppState;
+  addTopup: (amount: number) => void;
+  addExpense: (category: string, amount: number, hasReceipt: boolean) => void;
+  updateTransaction: (
+    id: string,
+    patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>
+  ) => void;
+  deleteTransaction: (id: string) => void;
+  closeReport: (carryOver: boolean) => void;
+  setCategories: (list: string[]) => void;
+  setHints: (category: string, hints: number[]) => void;
+  importData: (data: unknown) => void;
 }
 
-interface Ctx { state: State; dispatch: React.Dispatch<Action>; }
-const StoreContext = createContext<Ctx>({ state: initialState, dispatch: () => {} });
+const StoreContext = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, loadState);
+  const [data, dispatch] = useReducer(reducer, undefined, loadInitial);
+
   useEffect(() => {
     try {
-      const data: AppData = { version: APP_VERSION, balance: state.balance, transactions: state.transactions, reports: state.reports, quickCategories: state.quickCategories, categoryHints: state.categoryHints };
-      localStorage.setItem('otchet_app_data', JSON.stringify(data));
-    } catch {}
-  }, [state]);
-  return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      /* переполнение хранилища — данные останутся в памяти сессии */
+    }
+  }, [data]);
+
+  const addTopup = useCallback(
+    (amount: number) => dispatch({ type: "ADD_TOPUP", amount: round2(amount) }),
+    []
+  );
+  const addExpense = useCallback(
+    (category: string, amount: number, hasReceipt: boolean) =>
+      dispatch({
+        type: "ADD_EXPENSE",
+        category: category.trim() || "Прочее",
+        amount: round2(amount),
+        hasReceipt,
+      }),
+    []
+  );
+  const updateTransaction = useCallback(
+    (id: string, patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>) =>
+      dispatch({ type: "UPDATE_TX", id, patch }),
+    []
+  );
+  const deleteTransaction = useCallback(
+    (id: string) => dispatch({ type: "DELETE_TX", id }),
+    []
+  );
+  const closeReport = useCallback(
+    (carryOver: boolean) => dispatch({ type: "CLOSE_REPORT", carryOver }),
+    []
+  );
+  const setCategories = useCallback(
+    (list: string[]) => dispatch({ type: "SET_CATEGORIES", list }),
+    []
+  );
+  const setHints = useCallback(
+    (category: string, hints: number[]) =>
+      dispatch({ type: "SET_HINTS", category, hints }),
+    []
+  );
+  const importData = useCallback(
+    (imported: unknown) => dispatch({ type: "IMPORT", data: imported }),
+    []
+  );
+
+  const api = useMemo<StoreApi>(
+    () => ({
+      data,
+      addTopup,
+      addExpense,
+      updateTransaction,
+      deleteTransaction,
+      closeReport,
+      setCategories,
+      setHints,
+      importData,
+    }),
+    [
+      data,
+      addTopup,
+      addExpense,
+      updateTransaction,
+      deleteTransaction,
+      closeReport,
+      setCategories,
+      setHints,
+      importData,
+    ]
+  );
+
+  return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
 }
 
-export function useStore() { return useContext(StoreContext); }
+export function useStore(): StoreApi {
+  const ctx = useContext(StoreContext);
+  if (!ctx) throw new Error("useStore должен вызываться внутри StoreProvider");
+  return ctx;
+}
