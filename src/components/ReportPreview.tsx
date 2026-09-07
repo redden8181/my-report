@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FileUp, RotateCw } from "lucide-react";
 import { useStore } from "../store";
 import type { Report } from "../types";
-import { fmtDayMonth, nfAmount, round2 } from "../utils";
+import { chronological, fmtDayMonth, nfAmount, round2 } from "../utils";
 import { shareReportXlsx } from "../exportExcel";
 import { LedgerEmpty, LedgerTable, LedgerTotals } from "./Ledger";
 import { NewReportFlow } from "./NewReportFlow";
@@ -17,13 +17,15 @@ export function currentAsReport(txs: Report["transactions"]): Report | null {
   const totalExpense = round2(
     txs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0)
   );
+  // строго по дате: старые сверху, новые снизу + пересчёт балансов
+  const ordered = chronological(txs);
   return {
     id: "current",
-    transactions: txs,
+    transactions: ordered,
     totalTopup,
     totalExpense,
-    finalBalance: txs[txs.length - 1].balanceAfter,
-    startDate: txs[0].date,
+    finalBalance: ordered[ordered.length - 1].balanceAfter,
+    startDate: ordered[0].date,
     endDate: new Date().toISOString(),
   };
 }

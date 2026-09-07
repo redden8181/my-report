@@ -33,6 +33,24 @@ const nfMoney = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 2,
 });
 
+/**
+ * Приводит операции к строгому хронологическому порядку (старые сверху,
+ * новые снизу) и пересчитывает balanceAfter под этот порядок.
+ * Сортировка стабильная: операции с одинаковой датой не меняются местами.
+ */
+export function chronological<TransactionLike extends { date: string; type: string; amount: number }>(
+  txs: TransactionLike[]
+): (TransactionLike & { balanceAfter: number })[] {
+  const time = (t: { date: string }) => new Date(t.date).getTime();
+  const sorted = [...txs].sort((a, b) => time(a) - time(b));
+
+  let balance = 0;
+  return sorted.map((t) => {
+    balance = round2(balance + (t.type === "topup" ? t.amount : -t.amount));
+    return { ...t, balanceAfter: balance };
+  });
+}
+
 /** "1 234,56 ₽" / "−810 ₽" */
 export function formatMoney(n: number, withSymbol = true): string {
   const s = nfMoney.format(Math.abs(n));

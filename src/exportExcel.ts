@@ -2,6 +2,7 @@ import * as XLSX from "xlsx-js-style";
 import type { Report, Transaction } from "./types";
 import {
   backupFileName,
+  chronological,
   downloadBlob,
   fmtDateTimeExcel,
   reportFileName,
@@ -69,7 +70,8 @@ const signed = (t: Transaction) =>
  * заголовок, период, таблица (№, Дата, Категория, Сумма, Чек, Баланс), итоги.
  */
 function buildSheet(rep: Report): XLSX.WorkSheet {
-  const txs = rep.transactions;
+  // гарантия порядка: строго по дате, старые сверху, новые снизу
+  const txs = chronological(rep.transactions);
 
   const title = "Отчёт о расходах";
   const period = `Период: ${fmtDateTimeExcel(rep.startDate).slice(0, 10)} — ${fmtDateTimeExcel(

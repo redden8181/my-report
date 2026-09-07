@@ -16,19 +16,19 @@ import {
 import {
   DEFAULT_CATEGORIES,
   STORAGE_KEY,
+  chronological,
   round2,
   uid,
 } from "./utils";
 
 /* ============ вычисления ============ */
 
-/** Последовательный пересчёт balanceAfter от нуля. */
+/**
+ * Пересчёт balanceAfter. Операции предварительно выстраиваются строго
+ * по дате (старые → новые), чтобы порядок не «гулял» в отчётах и Excel.
+ */
 function recalcTxs(txs: Transaction[]): Transaction[] {
-  let balance = 0;
-  return txs.map((t) => {
-    balance = round2(balance + (t.type === "topup" ? t.amount : -t.amount));
-    return { ...t, balanceAfter: balance };
-  });
+  return chronological(txs);
 }
 
 const lastBalance = (txs: Transaction[]): number =>
