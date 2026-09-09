@@ -162,6 +162,7 @@ type Action =
       category: string;
       amount: number;
       hasReceipt: boolean;
+      date?: string;
     }
   | {
       type: "UPDATE_TX";
@@ -194,19 +195,22 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case "ADD_EXPENSE": {
-      const tx = {
-        ...makeTx({
+      const tx = makeTx(
+        {
           type: "expense",
           category: action.category,
           amount: action.amount,
           hasReceipt: action.hasReceipt,
-        }),
-        balanceAfter: round2(state.balance - action.amount),
-      };
+        },
+        action.date
+      );
+      // recalcTxs сортирует по дате: расход «задним числом» встанет
+      // на своё место, а балансы пересчитаются по всей цепочке
+      const recalced = recalcTxs([...state.transactions, tx]);
       return {
         ...state,
-        transactions: [...state.transactions, tx],
-        balance: tx.balanceAfter,
+        transactions: recalced,
+        balance: lastBalance(recalced),
       };
     }
 
@@ -321,7 +325,12 @@ function reducer(state: AppState, action: Action): AppState {
 interface StoreApi {
   data: AppState;
   addTopup: (amount: number) => void;
-  addExpense: (category: string, amount: number, hasReceipt: boolean) => void;
+  addExpense: (
+    category: string,
+    amount: number,
+    hasReceipt: boolean,
+    date?: string
+  ) => void;
   updateTransaction: (
     id: string,
     patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>
@@ -351,12 +360,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
   const addExpense = useCallback(
-    (category: string, amount: number, hasReceipt: boolean) =>
+    (category: string, amount: number, hasReceipt: boolean, date?: string) =>
       dispatch({
         type: "ADD_EXPENSE",
         category: category.trim() || "Прочее",
         amount: round2(amount),
         hasReceipt,
+        date,
       }),
     []
   );

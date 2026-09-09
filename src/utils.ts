@@ -120,6 +120,47 @@ export const fmtDateExcel = (iso: string): string => {
 const startOfDay = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
+/** "2026-06-21" — значение для <input type="date"> (локальное, без UTC-сдвига) */
+export function toDateInputValue(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Разбирает "2026-06-21" в локальную дату (без UTC-сдвига). */
+export function fromDateInputValue(v: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * ISO-строка операции для выбранного дня.
+ * Время берётся текущее — чтобы операции внутри дня шли по порядку ввода.
+ */
+export function isoForDay(day: Date): string {
+  const now = new Date();
+  const d = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+  return d.toISOString();
+}
+
+/** Сколько дней назад: 0 — сегодня, 1 — вчера. */
+export function daysAgo(d: Date): number {
+  return Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+}
+
+/** "21.06" — короткая метка для кнопки выбора даты. */
+export function fmtDayMonthNum(d: Date): string {
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+}
+
 /** «Сегодня» / «Вчера» / «21 июня» (с годом, если не текущий) */
 export function dayLabel(iso: string): string {
   const d = new Date(iso);

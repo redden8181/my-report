@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  CalendarDays,
+  Check,
   Pencil,
   Plus,
   Receipt,
@@ -10,11 +12,16 @@ import { useStore } from "../store";
 import type { Transaction } from "../types";
 import {
   dayLabel,
+  daysAgo,
+  fmtDayMonthNum,
   formatMoney,
   formatSigned,
   fmtTime,
+  fromDateInputValue,
+  isoForDay,
   nfAmount,
   parseAmount,
+  toDateInputValue,
 } from "../utils";
 import { SectionTitle, Switch, useToast } from "./ui";
 import { TopupModal } from "./TopupModal";
@@ -91,6 +98,13 @@ function ExpenseForm() {
   const [shaking, setShaking] = useState(false);
   const shakeTimer = useRef<number | undefined>(undefined);
 
+  // дата операции: сегодня / вчера / выбранная вручную
+  const [day, setDay] = useState<Date>(() => new Date());
+  const dayOffset = daysAgo(day);
+  const isToday = dayOffset === 0;
+  const isYesterday = dayOffset === 1;
+  const isCustom = !isToday && !isYesterday;
+
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 
   const amount = parseAmount(amountStr);
@@ -119,11 +133,22 @@ function ExpenseForm() {
       nudge();
       return;
     }
-    addExpense(effectiveCategory, amount, hasReceipt);
+    addExpense(effectiveCategory, amount, hasReceipt, isoForDay(day));
     setAmountStr("");
     setHasReceipt(false);
-    show(`− ${formatMoney(amount)} · ${effectiveCategory}`);
+    show(
+      `− ${formatMoney(amount)} · ${effectiveCategory}` +
+        (isToday ? "" : ` · ${fmtDayMonthNum(day)}`)
+    );
   };
+
+  /** Единый стиль кнопок выбора даты: активная — залитая сосновая. */
+  const dayBtn = (active: boolean) =>
+    `relative flex min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-[13px] font-bold transition active:scale-95 ${
+      active
+        ? "border-transparent bg-pine text-card shadow-[0_8px_18px_-10px_rgba(23,69,47,0.9)]"
+        : "border-edge bg-tint text-muted"
+    }`;
 
   return (
     <div
@@ -224,6 +249,54 @@ function ExpenseForm() {
           ))}
         </div>
       )}
+
+      {/* 3. дата операции */}
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        <button
+          type="button"
+          onClick={() => setDay(new Date())}
+          className={dayBtn(isToday)}
+        >
+          {isToday && <Check size={13} strokeWidth={3.2} />}
+          Сегодня
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            setDay(d);
+          }}
+          className={dayBtn(isYesterday)}
+        >
+          {isYesterday && <Check size={13} strokeWidth={3.2} />}
+          Вчера
+        </button>
+        <label className={dayBtn(isCustom)}>
+          {isCustom ? (
+            <>
+              <Check size={13} strokeWidth={3.2} />
+              {fmtDayMonthNum(day)}
+            </>
+          ) : (
+            <>
+              <CalendarDays size={13} strokeWidth={2.6} />
+              Дата
+            </>
+          )}
+          <input
+            type="date"
+            aria-label="Дата расхода"
+            max={toDateInputValue(new Date())}
+            value={isCustom ? toDateInputValue(day) : ""}
+            onChange={(e) => {
+              const d = fromDateInputValue(e.target.value);
+              if (d) setDay(d);
+            }}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
 
       <button
         type="button"
