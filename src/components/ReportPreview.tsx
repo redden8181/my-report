@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { FileUp, RotateCw } from "lucide-react";
+import { ChevronRight, ClipboardCheck, FileUp } from "lucide-react";
 import { useStore } from "../store";
 import type { Report } from "../types";
 import { chronological, fmtDayMonth, nfAmount, round2 } from "../utils";
 import { shareReportXlsx } from "../exportExcel";
 import { LedgerEmpty, LedgerTable, LedgerTotals } from "./Ledger";
 import { NewReportFlow } from "./NewReportFlow";
-import { ScreenHead, useToast } from "./ui";
+import { ScreenHead, SectionTitle, useToast } from "./ui";
 
 /** Сводка текущего (незавершённого) периода в форме отчёта. */
 export function currentAsReport(txs: Report["transactions"]): Report | null {
@@ -124,8 +124,68 @@ export function ReportPreview() {
         />
       </div>
 
+      {/* действия — сразу вверху: за файлом заходят в первую очередь */}
+      <div className="mx-4 mt-3 space-y-2.5">
+        {/* сдать отчёт: проверка чеков → Excel → новый период */}
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={empty}
+          className={`w-full rounded-2xl px-4 py-4 text-left transition active:scale-[0.98] ${
+            empty ? "bg-tint" : "pine-glow bg-pine"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                empty ? "bg-card/60 text-muted" : "bg-card/15 text-card"
+              }`}
+            >
+              <ClipboardCheck size={21} strokeWidth={2.2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span
+                className={`block font-display text-[16px] font-extrabold leading-tight ${
+                  empty ? "text-muted" : "text-card"
+                }`}
+              >
+                Сдать отчёт, начать новый
+              </span>
+              <span
+                className={`mt-0.5 block text-[11px] leading-snug ${
+                  empty ? "text-muted/70" : "text-card/70"
+                }`}
+              >
+                Проверим чеки → соберём Excel → откроем новый период
+              </span>
+            </span>
+            <ChevronRight
+              size={18}
+              strokeWidth={2.6}
+              className={empty ? "text-muted/50" : "text-card/60"}
+            />
+          </div>
+        </button>
+
+        {/* быстрый экспорт без закрытия периода */}
+        <button
+          type="button"
+          onClick={share}
+          disabled={empty || sharing}
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl border py-3.5 text-[14px] font-bold transition active:scale-[0.98] ${
+            empty
+              ? "border-edge bg-card text-muted/50"
+              : "border-pine/30 bg-card text-pine"
+          }`}
+        >
+          <FileUp size={17} strokeWidth={2.6} />
+          {sharing ? "Формирую файл…" : "Просто скачать Excel сейчас"}
+        </button>
+      </div>
+
       {/* журнал операций */}
-      <div className="panel mx-4 mt-3 overflow-hidden rounded-[24px] px-4 py-4">
+      <SectionTitle>Операции периода</SectionTitle>
+      <div className="panel mx-4 overflow-hidden rounded-[24px] px-4 py-4">
         {empty ? (
           <LedgerEmpty hint="Пока нечего показывать — добавьте операции на главном экране" />
         ) : (
@@ -138,34 +198,6 @@ export function ReportPreview() {
             />
           </>
         )}
-      </div>
-
-      <div className="mx-4 mt-4 space-y-2.5">
-        <button
-          type="button"
-          onClick={share}
-          disabled={empty || sharing}
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-display text-[15px] font-extrabold transition active:scale-[0.98] ${
-            empty ? "bg-tint text-muted" : "pine-glow bg-pine text-card"
-          }`}
-        >
-          <FileUp size={18} strokeWidth={2.6} />
-          {sharing ? "Формирую файл…" : "Отправить Excel"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          disabled={empty}
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl border py-4 font-mono text-[13px] font-bold uppercase tracking-[0.14em] transition active:scale-[0.98] ${
-            empty
-              ? "border-edge bg-card text-muted/50"
-              : "border-pine/30 bg-card text-pine"
-          }`}
-        >
-          <RotateCw size={16} strokeWidth={2.6} />
-          Новый отчёт
-        </button>
       </div>
 
       {/* мастер закрытия периода с проверкой чеков */}

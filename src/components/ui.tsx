@@ -16,12 +16,16 @@ export function Sheet({
   title,
   children,
   tall = false,
+  keepMounted = false,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
   tall?: boolean;
+  /** Держать содержимое в DOM всегда — нужно, чтобы iOS мог
+   *  синхронно сфокусировать поле и сразу показать клавиатуру. */
+  keepMounted?: boolean;
 }) {
   const [mounted, setMounted] = useState(open);
   const [shown, setShown] = useState(false);
@@ -46,22 +50,26 @@ export function Sheet({
   }, [open]);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || !open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [mounted]);
+  }, [mounted, open]);
 
-  if (!mounted) return null;
+  if (!mounted && !keepMounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div
+      className={`fixed inset-0 z-50 ${
+        mounted ? "" : "pointer-events-none"
+      }`}
+    >
       <div
         onClick={onClose}
         className={`absolute inset-0 bg-ink/40 backdrop-blur-[3px] transition-opacity duration-300 ${
-          shown ? "opacity-100" : "opacity-0"
+          shown ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
       <div

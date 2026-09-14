@@ -89,10 +89,10 @@ export function NewReportFlow({
 
   const title =
     step === "intro"
-      ? "Новый отчёт"
+      ? "Сдать отчёт"
       : step === "audit"
-        ? "Проверка чеков"
-        : "Отчёт готов";
+        ? "Шаг 1 · Проверка чеков"
+        : "Шаг 2 · Отчёт готов";
 
   return (
     <Sheet open={open} onClose={onClose} title={title}>

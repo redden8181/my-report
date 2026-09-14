@@ -471,13 +471,25 @@ function History() {
 
 export function HomeScreen() {
   const [topupOpen, setTopupOpen] = useState(false);
+  const topupInputRef = useRef<HTMLInputElement>(null);
+
+  /** Фокус ставим синхронно внутри жеста — только так iOS
+   *  открывает клавиатуру сразу вместе со шторкой. */
+  const openTopup = () => {
+    topupInputRef.current?.focus();
+    setTopupOpen(true);
+  };
 
   return (
     <div className="fade-up">
-      <BalanceHero onTopup={() => setTopupOpen(true)} />
+      <BalanceHero onTopup={openTopup} />
       <ExpenseForm />
       <History />
-      <TopupModal open={topupOpen} onClose={() => setTopupOpen(false)} />
+      <TopupModal
+        open={topupOpen}
+        onClose={() => setTopupOpen(false)}
+        inputRef={topupInputRef}
+      />
     </div>
   );
 }
