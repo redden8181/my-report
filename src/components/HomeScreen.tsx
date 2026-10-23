@@ -211,7 +211,11 @@ function ExpenseForm() {
           value={amountStr}
           onChange={(e) => setAmountStr(e.target.value.replace(/[^\d.,]/g, ""))}
           onKeyDown={(e) => e.key === "Enter" && submit()}
+          type="number"
           inputMode="decimal"
+          min="0"
+          step="any"
+          autoComplete="off"
           placeholder="0"
           aria-label="Сумма расхода"
           className="tnum min-w-0 flex-1 bg-transparent font-mono text-[30px] font-bold tracking-tight text-ink outline-none"
