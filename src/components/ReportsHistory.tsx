@@ -148,7 +148,7 @@ function SearchResults({
 
 /* ---------- экран архива ---------- */
 
-export function ReportsHistory() {
+export function ReportsHistory({ initialSearch = false }: { initialSearch?: boolean }) {
   const { data } = useStore();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Report | null>(null);
@@ -177,7 +177,7 @@ export function ReportsHistory() {
     <div className="fade-up pb-2">
       <ScreenHead
         kicker="Журнал периодов"
-        title="Архив"
+        title={initialSearch ? "Поиск расходов" : "Архив"}
         sub={
           data.reports.length
             ? `Завершённых отчётов: ${data.reports.length}`
@@ -191,7 +191,7 @@ export function ReportsHistory() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           enterKeyHint="search"
-          placeholder="Поиск: парковка 300"
+          placeholder={initialSearch ? "Сумма, дата, категория, комментарий" : "Поиск по архиву"}
           className="w-full bg-transparent py-2.5 text-[16px] text-ink outline-none"
         />
         {query && (
