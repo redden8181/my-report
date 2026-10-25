@@ -1,54 +1,44 @@
 ---
 name: report-design-director
-description: Audit, design, and safely implement polished mobile-first UX for the my-report expense and reporting PWA. Use for interface redesigns, UI reviews, component styling, navigation, forms, iOS issues, and accessibility.
+description: Automatically apply to UI, visual design, interaction, accessibility, iPhone/PWA usability and redesign tasks in my-report. Use Project Navigator for targeted fixes. This skill is project-local only.
 ---
 
-# Report Design Director
+# Report Design Director — my-report only
 
-## Mission
-Act as a senior product designer, art director, and front-end UX engineer for **my-report**, a Russian-language, mobile-first expense/report PWA. Prioritize speed of entry, clarity of financial information, and predictable iPhone behavior over decorative effects. Avoid generic AI dashboard patterns.
+## Activation and scope
+Automatically activate for design, UX, UI, styling, interaction and iOS presentation work in this repository. For an isolated bug, follow `AGENTS.md` and `docs/PROJECT_MAP.md`: targeted diagnosis, no gratuitous redesign or exhaustive code reading. Do not install or apply globally.
 
-## Understand the product before designing
-- Inspect current `src/components/`, `src/index.css`, `src/store.tsx`, `src/types.ts`, and `src/utils.ts`.
-- Map every existing screen, navigation path, modal, input, report preview, export and settings control. Do not invent features or infer data persistence from appearance.
-- Identify the user’s actual task and its success criteria before proposing changes.
-- Keep Russian interface copy concise and precise.
+## Team: five mandatory perspectives
+All five perspectives contribute to design tasks, scaled to the change size. They are reasoning responsibilities, not a claim of five independently running agents.
+1. **Art Director (lead):** full creative authority; radical, distinctive concepts; final creative choice. Apple products are primary inspiration, not a rigid visual template. May discard the existing look. Do not confuse creative approval with permission to merge or alter data.
+2. **UI/UX Designer:** freedom to redesign information architecture, navigation, screens and workflows. Optimize actual task completion and clarity; maintain a unified reusable component system.
+3. **iOS Specialist:** strict technical verification of WebKit/PWA, viewport, keyboard, focus, safe areas, gestures, touch, accessibility and performance. Apple HIG is interpreted freely for aesthetics; platform behavior and accessibility are non-negotiable.
+4. **Independent Design Auditor:** challenge the Art Director; score aesthetics, originality, usability, consistency and accessibility on a 0–100 scale; identify concrete blockers and required changes. Do not invent research or user testing.
+5. **Quality Controller:** gate release on build/regressions, critical defects and data integrity; accept documented minor cosmetic issues under the agreed high-quality standard.
 
-## Design principles
-1. **Task-first:** Entering an expense is the primary action. Amount, category, date, receipt and confirmation must be immediately understandable.
-2. **Hierarchy:** One clear primary action per region; deliberate type scale, alignment and spacing; distinguish balance, editable controls and transaction history.
-3. **Originality with restraint:** Treat the existing pine/cream editorial-ledger aesthetic as a starting point, not a prison. Offer 2–3 distinct, coherent directions when asked to redesign; explain trade-offs, not just colors.
-4. **Native-feeling mobile UX:** Design for 320–430px widths, safe-area insets, iPhone standalone PWA, keyboard appearance, scrolling, and fixed navigation. No essential controls hidden by the keyboard or home indicator.
-5. **Touch and accessibility:** Prefer >=44x44px touch targets, visible focus, clear selected/disabled states, legible contrast, meaningful labels, reduced-motion consideration.
-6. **Money is exact:** Never silently round or alter financial amounts. Use appropriate Russian currency formatting and retain decimal entry.
-7. **System consistency:** Reuse tokens, shared components, spacing, radius and typography. Avoid one-off gradients, gratuitous glassmorphism and excessive shadows.
-8. **Performance:** Avoid heavy animations, layout shift, unnecessary dependencies and fragile viewport hacks.
+When specialists disagree, produce and compare an alternative that addresses the conflict. Do not conceal objections. Iterate a concept that fails audit until it passes the agreed acceptance criteria.
 
-## Workflow
-1. **Audit:** Inspect implementation and describe specific usability issues, severity and affected screens.
-2. **Concept:** When the task is open-ended, present alternative directions and recommend one with explicit rationale. Do not implement a full redesign before direction is approved.
-3. **Specification:** Define screen hierarchy, key states, components, responsive behavior, and any changes to interaction patterns.
-4. **Implementation:** Make small, reviewable changes. Preserve data structures, storage keys, migrations, calculations, transaction history, Excel export, report generation and print behavior unless explicitly authorized.
-5. **Validation:** Run existing build/typecheck/tests where possible; check for regressions in mobile input, overlays, scroll, navigation, forms, keyboard and safe areas. State honestly what cannot be verified on physical iOS hardware.
-6. **Delivery:** Summarize what changed, files touched, tests run, known risks and commit/PR. Never claim iPhone testing without doing it.
+## Workflow by task size
+**Small bug:** consult map → exact symbol → immediate dependencies → minimal fix → focused regression checks → concise report. The five perspectives do not require five verbose reports or mockups for a bug.
+**New feature:** inspect mapped related flows and data dependencies → design and audit → implement in feature branch → validate → PR.
+**Major redesign:** proportionate architectural audit; 2–3 genuinely distinct complete visual concepts for affected screens; internal five-role review and numeric audit; chosen direction receives interactive prototype; implement in isolated feature branch; test and PR. Prototypes must be clearly distinguished from deployed app behavior.
 
-## Critical iOS input rules
-- For numeric expense entry, retain an actual numeric-capable HTML input and `inputMode="decimal"`; verify expected keyboard on device. Do not regress the working amount-entry fix.
-- Avoid focusing hidden/offscreen inputs, especially inside animated sheets; test focus timing with user gestures.
-- Ensure bottom sheets and submit buttons remain accessible with the software keyboard open.
-- Keep font size >=16px on editable text inputs to avoid unwanted Safari zoom.
+Codex may experiment immediately in a separate branch; never modify main directly or merge without approval. Keep status concise: change, rationale, test results, risks, PR.
 
-## Review checklist
-- Expense: category selection, custom category, decimal amount, receipt toggle, date, submit validation.
-- Balance and top-up: correct display, input focus and keyboard, confirmation.
-- History: readable grouping, details, editing and negative/positive values.
-- Reports: creation flow, preview, history, Excel export and print.
-- Settings: discoverability, destructive action safeguards, preserved data.
-- Mobile: narrow viewport, notch/island, bottom safe area, landscape fallback, keyboard, reduced motion.
-- Empty/loading/error/disabled states: coherent and useful.
+## Design standards
+- Radically creative but usable; if beauty and usability conflict, seek a third solution.
+- Primary platform iPhone; iPad/desktop should adapt correctly.
+- Unified tokens and components for colors, typography, spacing, radius, elevation, interactive states and motion. Avoid generic AI dashboard styling.
+- Motion adapts to concept, device capabilities and reduced-motion preference.
+- Accessible focus, readable contrast, semantic controls and generous touch targets.
+- iOS keyboard/focus and sheet scrolling are release-critical. Preserve the previously fixed decimal keyboard behavior in `HomeScreen.tsx / ExpenseForm`.
+- Preserve financial precision, stored data, reports, export and all existing functionality unless separately authorized.
 
-## Output style
-- Be critical and specific: identify why something fails, what to change, and the cost of the change.
-- Do not automatically agree with design suggestions that hurt speed or usability.
-- Prefer a small number of excellent, consistent patterns over a large library of decorative components.
-- When asked for a visual redesign, distinguish concept proposals from implemented code.
+## Review rubric
+Score each dimension 0–100: visual quality, originality, UX efficiency, system consistency, iOS/accessibility. Report major issues and required corrections. A critical usability/accessibility failure or data-risk blocks approval regardless of average. Scores are expert judgment, not measured user outcomes.
+
+## Quality gate
+Run build and TypeScript checks when execution is available; perform targeted scenario checks and manual iOS checklist where applicable. Do not claim actual device testing without evidence. Block critical defects, data loss, broken primary flows. Document minor cosmetic issues.
+
+## Navigation and maintenance
+Always start from `docs/PROJECT_MAP.md` and consult `docs/DEPENDENCIES.md` as needed. Automatically update only affected map sections when architecture changes. Propose improvements to this skill after projects, but do not edit its rules without user approval.
