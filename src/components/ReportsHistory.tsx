@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Archive, ArrowLeft, Check, FileSpreadsheet, Search, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Search, X } from "lucide-react";
 import { useStore } from "../store";
 import type { Report,Transaction } from "../types";
 import { formatMoney,fmtDayMonthYear,fmtTime,reportTitle,txMatchesQuery,toDateInputValue,parseAmount } from "../utils";
