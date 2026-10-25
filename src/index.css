@@ -208,3 +208,66 @@ input:focus-visible {
 .shake {
   animation: shake-x 0.4s ease;
 }
+
+
+/* FORMA / editorial financial workspace — design tokens and responsive system */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --color-paper: #f6f4ef;
+  --color-card: #ffffff;
+  --color-tint: #f0eee8;
+  --color-edge: #e2dfd6;
+  --color-ink: #202723;
+  --color-muted: #7c817b;
+  --color-pine: #243e35;
+  --color-volt: #d3ee8b;
+  --color-income: #16876c;
+  --color-burn: #bd5449;
+}
+html {background:#f6f4ef}
+body {background:#f6f4ef}
+.atelier-app {background:radial-gradient(ellipse 85% 45% at 80% -10%,#e7eee1 0%,transparent 75%),#f6f4ef}
+.atelier-header {background:rgba(246,244,239,.94);backdrop-filter:blur(24px);border-bottom:1px solid #e3e0d8}
+.brand-mark {width:42px;height:42px;display:grid;place-items:center;background:#243e35;color:#e0f1ba;border-radius:14px;box-shadow:0 8px 22px #243e352b}
+.brand-title {font-weight:900;font-size:19px;letter-spacing:-.075em;line-height:1}
+.brand-period {color:#8fb76e}
+.brand-subtitle {font-family:var(--font-mono);font-size:8px;letter-spacing:.15em;color:#858b83;margin-top:6px}
+.header-section {font-size:11px;font-weight:700;color:#44584c;border:1px solid #d8ded4;border-radius:100px;padding:8px 11px}
+.header-count {font-family:var(--font-mono);font-size:10px;color:#858b83;letter-spacing:.05em}
+.atelier-dock {background:linear-gradient(transparent,#f6f4ef 24%);pointer-events:none}
+.atelier-dock>div {pointer-events:auto;background:#fff;border:1px solid #e7e5dd;border-radius:24px 24px 0 0;box-shadow:0 -8px 40px #1b302017}
+.atelier-tab {display:flex;min-height:59px;flex-direction:column;justify-content:center;align-items:center;gap:4px;border-radius:16px;color:#8c918b;position:relative;transition:background .18s,color .18s}
+.atelier-tab-active {background:#243e35;color:#fff}
+.atelier-tab-label {font-size:10px;font-weight:700}
+.atelier-tab-number {display:none}
+.atelier-layout {display:block}
+.atelier-main {width:100%;max-width:760px;margin:0 auto}
+.atelier-main .panel {border-radius:22px;background:#fff;border-color:#e5e2da;box-shadow:0 4px 24px #243e350b}
+.atelier-main .micro {font-family:var(--font-mono);letter-spacing:.12em;font-size:10px}
+.atelier-main h1 {letter-spacing:-.055em}
+.atelier-main button {cursor:pointer}
+.atelier-main button:active {filter:brightness(.97)}
+.atelier-main input,.atelier-main textarea {font-size:max(16px,1em)}
+.atelier-main input:focus-visible,.atelier-main textarea:focus-visible {outline:2px solid #8caa8d;outline-offset:2px}
+.atelier-main .bg-pine {background-color:#243e35}
+.atelier-main .text-pine {color:#243e35}
+.atelier-main .bg-volt {background-color:#d3ee8b}
+.atelier-main .pine-glow {box-shadow:0 12px 24px -12px #243e35a8}
+.atelier-rail {flex-direction:column;gap:8px;width:250px;flex-shrink:0;position:sticky;top:105px;align-self:flex-start;padding-top:28px}
+.rail-caption {font:700 10px var(--font-mono);letter-spacing:.13em;color:#92968e;margin:0 0 12px 16px}
+.rail-item {display:flex;align-items:center;gap:13px;padding:15px;border-radius:15px;text-align:left;color:#7b847b;transition:.18s}
+.rail-item>span {font:600 10px var(--font-mono);opacity:.65}
+.rail-item strong {font-size:13px}
+.rail-item-active {background:#243e35;color:#fff;box-shadow:0 10px 25px #243e3521}
+.rail-foot {display:flex;gap:8px;align-items:center;margin:32px 15px;color:#94998f;font-size:11px}
+@media(min-width:768px){
+ .atelier-layout {display:flex;gap:32px}
+ .atelier-main {flex:1;min-width:0;max-width:750px}
+ .atelier-dock {display:none}
+ .atelier-main .panel {margin-left:0;margin-right:0}
+ .atelier-main>div>section,.atelier-main>section {max-width:100%}
+}
+@media(max-width:380px){.header-count{display:none}.brand-title{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.atelier-app *, .atelier-app *::before,.atelier-app *::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
