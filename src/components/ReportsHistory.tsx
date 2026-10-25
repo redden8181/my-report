@@ -1,294 +1,47 @@
 import { useMemo, useState } from "react";
-import { Archive, Check, ChevronRight, FileUp, Search, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Search, X } from "lucide-react";
 import { useStore } from "../store";
-import type { Report, Transaction } from "../types";
-import {
-  formatMoney,
-  formatSigned,
-  fmtDayMonth,
-  fmtTime,
-  norm,
-  reportTitle,
-  txMatchesQuery,
-} from "../utils";
+import type { Report,Transaction } from "../types";
+import { formatMoney,fmtDayMonthYear,fmtTime,reportTitle,txMatchesQuery,toDateInputValue,parseAmount } from "../utils";
 import { shareReportXlsx } from "../exportExcel";
-import { LedgerTable, LedgerTotals } from "./Ledger";
-import { ScreenHead, SectionTitle, Sheet, useToast } from "./ui";
+import { useToast } from "./ui";
 
-/* ---------- детальный просмотр отчёта из архива ---------- */
-
-function ReportDetail({
-  report,
-  onClose,
-}: {
-  report: Report | null;
-  onClose: () => void;
-}) {
-  const { show, node } = useToast();
-  const [sharing, setSharing] = useState(false);
-
-  const share = async () => {
-    if (!report || sharing) return;
-    setSharing(true);
-    try {
-      const res = await shareReportXlsx(report);
-      if (res === "shared") show("Excel отправлен");
-      else if (res === "downloaded") show("Excel сохранён в файлы");
-      else show("Отправка отменена");
-    } catch {
-      show("Не удалось сформировать Excel", "error");
-    } finally {
-      setSharing(false);
-    }
+function ArchiveEditor({report,tx,onClose}:{report:Report;tx:Transaction;onClose:()=>void}){
+  const {updateArchivedTransaction}=useStore();
+  const [category,setCategory]=useState(tx.category);
+  const [amount,setAmount]=useState(String(tx.amount));
+  const [comment,setComment]=useState(tx.comment??"");
+  const [receipt,setReceipt]=useState(tx.hasReceipt);
+  const [date,setDate]=useState(toDateInputValue(new Date(tx.date)));
+  const [time,setTime]=useState(new Date(tx.date).toTimeString().slice(0,5));
+  const save=()=>{
+    const n=parseAmount(amount),d=new Date(date+"T"+time+":00");
+    if(!n||!category.trim()||Number.isNaN(d.getTime()))return;
+    updateArchivedTransaction(report.id,tx.id,{category:category.trim(),amount:n,comment:comment.trim(),hasReceipt:receipt,date:d.toISOString()});onClose();
   };
-
-  return (
-    <Sheet open={!!report} onClose={onClose} title="Отчёт из архива" tall>
-      {report && (
-        <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
-            <div className="mb-3 font-display text-[16px] font-bold leading-tight text-ink">
-              {reportTitle(report.startDate, report.endDate)}
-              <span className="ml-2 font-mono text-[11px] font-medium text-muted">
-                {report.transactions.length} оп.
-              </span>
-            </div>
-            <div className="panel rounded-[22px] px-4 py-4">
-              <LedgerTable txs={report.transactions} />
-              <LedgerTotals
-                topup={report.totalTopup}
-                expense={report.totalExpense}
-                balance={report.finalBalance}
-              />
-            </div>
-          </div>
-          <div className="px-5 pt-1">
-            <button
-              type="button"
-              onClick={share}
-              disabled={sharing}
-              className="pine-glow flex w-full items-center justify-center gap-2 rounded-2xl bg-pine py-4 font-display text-[15px] font-extrabold text-card transition active:scale-[0.98]"
-            >
-              <FileUp size={18} strokeWidth={2.6} />
-              {sharing ? "Формирую файл…" : "Отправить Excel снова"}
-            </button>
-          </div>
-        </>
-      )}
-      {node}
-    </Sheet>
-  );
+  return <div className="archive-edit"><h3>Исправить запись</h3><p>После изменения нужно повторно экспортировать Excel.</p><label>Категория<input value={category} onChange={e=>setCategory(e.target.value)}/></label><label>Сумма<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Комментарий<input value={comment} onChange={e=>setComment(e.target.value)}/></label><div className="archive-edit-grid"><label>Дата<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Время<input type="time" value={time} onChange={e=>setTime(e.target.value)}/></label></div><label className="archive-check"><input type="checkbox" checked={receipt} onChange={e=>setReceipt(e.target.checked)}/> Есть чек</label><div className="archive-actions"><button onClick={onClose}>Отмена</button><button className="primary" onClick={save}>Сохранить</button></div></div>;
 }
-
-/* ---------- результаты поиска ---------- */
-
-interface Hit {
-  report: Report;
-  tx: Transaction;
-}
-
-function SearchResults({
-  hits,
-  onOpen,
-}: {
-  hits: Hit[];
-  onOpen: (r: Report) => void;
-}) {
-  const reportCount = new Set(hits.map((h) => h.report.id)).size;
-  return (
-    <div className="fade-up">
-      <SectionTitle>
-        Найдено: {hits.length} оп. в {reportCount} отчётах
-      </SectionTitle>
-      <div className="panel mx-4 overflow-hidden rounded-[22px]">
-        <div className="divide-y divide-dashed divide-edge">
-          {hits.slice(0, 60).map(({ report, tx }) => {
-            const topup = tx.type === "topup";
-            return (
-              <button
-                key={tx.id}
-                type="button"
-                onClick={() => onOpen(report)}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition active:bg-tint/70"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold leading-tight text-ink">
-                    {tx.category}
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-muted">
-                    {fmtDayMonth(tx.date)} · {fmtTime(tx.date)}
-                    {tx.hasReceipt && (
-                      <Check size={11} strokeWidth={3} className="text-income" />
-                    )}
-                  </span>
-                  <span className="mt-0.5 block truncate font-mono text-[10px] text-muted/70">
-                    {reportTitle(report.startDate, report.endDate)}
-                  </span>
-                </span>
-                <span
-                  className={`shrink-0 font-mono text-[14px] font-bold ${
-                    topup ? "text-income" : "text-ink"
-                  }`}
-                >
-                  {formatSigned(topup ? tx.amount : -tx.amount)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {hits.length > 60 && (
-        <div className="px-6 pt-2 text-[11px] text-muted">
-          Показаны первые 60 совпадений — уточните запрос
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------- экран архива ---------- */
-
-export function ReportsHistory() {
-  const { data } = useStore();
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Report | null>(null);
-
-  const searching = norm(query).length > 0;
-
-  const hits = useMemo<Hit[]>(() => {
-    if (!searching) return [];
-    const out: Hit[] = [];
-    for (const report of data.reports) {
-      for (const tx of report.transactions) {
-        if (txMatchesQuery(tx, query)) out.push({ report, tx });
-      }
-    }
-    out.sort((a, b) => b.tx.date.localeCompare(a.tx.date));
-    return out;
-  }, [data.reports, query, searching]);
-
-  // прячем клавиатуру, иначе она перекроет шторку отчёта
-  const openReport = (r: Report) => {
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    setSelected(r);
-  };
-
-  return (
-    <div className="fade-up pb-2">
-      <ScreenHead
-        kicker="Журнал периодов"
-        title="Архив"
-        sub={
-          data.reports.length
-            ? `Завершённых отчётов: ${data.reports.length}`
-            : "Завершённых отчётов пока нет"
-        }
-      />
-
-      <div className="panel mx-4 mt-3 flex items-center gap-2.5 rounded-full py-1 pl-4 pr-1.5">
-        <Search size={17} strokeWidth={2.4} className="shrink-0 text-muted" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          enterKeyHint="search"
-          placeholder="Поиск: парковка 300"
-          className="w-full bg-transparent py-2.5 text-[16px] text-ink outline-none"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Очистить"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tint text-muted transition active:scale-90"
-          >
-            <X size={14} strokeWidth={2.6} />
-          </button>
-        )}
-      </div>
-
-      {searching ? (
-        hits.length ? (
-          <SearchResults hits={hits} onOpen={openReport} />
-        ) : (
-          <div className="panel mx-4 mt-3 rounded-[22px] px-6 py-12 text-center">
-            <Search
-              size={26}
-              strokeWidth={1.4}
-              className="mx-auto text-muted/50"
-            />
-            <div className="mt-3 text-[14px] font-semibold text-muted">
-              Ничего не найдено
-            </div>
-            <div className="mt-1 text-[12px] text-muted/70">
-              Поиск идёт по завершённым отчётам
-            </div>
-          </div>
-        )
-      ) : data.reports.length === 0 ? (
-        <div className="panel mx-4 mt-3 rounded-[22px] px-6 py-12 text-center">
-          <Archive
-            size={26}
-            strokeWidth={1.4}
-            className="mx-auto text-muted/50"
-          />
-          <div className="mt-3 text-[14px] font-semibold text-muted">
-            Архив пуст
-          </div>
-          <div className="mt-1 text-[12px] text-muted/70">
-            Завершите период на вкладке «Отчёт»
-          </div>
-        </div>
-      ) : (
-        <div>
-          <SectionTitle>Отчёты</SectionTitle>
-          <div className="mx-4 space-y-2.5">
-            {data.reports.map((r) => {
-              const debt = r.finalBalance < 0;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => openReport(r)}
-                  className="panel w-full rounded-[22px] p-4 text-left transition active:scale-[0.99]"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 font-display text-[16px] font-bold leading-tight text-ink">
-                      {reportTitle(r.startDate, r.endDate)}
-                    </div>
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-tint">
-                      <ChevronRight
-                        size={15}
-                        strokeWidth={2.6}
-                        className="text-muted"
-                      />
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-lg bg-tint px-2.5 py-1 font-mono text-[11px] font-bold text-muted">
-                      {r.transactions.length} оп.
-                    </span>
-                    <span className="rounded-lg bg-tint px-2.5 py-1 font-mono text-[11px] font-bold text-ink">
-                      −{formatMoney(r.totalExpense)}
-                    </span>
-                    <span
-                      className={`rounded-lg px-2.5 py-1 font-mono text-[11px] font-bold ${
-                        debt
-                          ? "bg-burn/10 text-burn"
-                          : "bg-pine/8 text-pine"
-                      }`}
-                    >
-                      {debt ? "долг " : "+"}
-                      {formatMoney(Math.abs(r.finalBalance), false)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <ReportDetail report={selected} onClose={() => setSelected(null)} />
-    </div>
-  );
+export function ReportsHistory({initialSearch=false}:{initialSearch?:boolean}){
+  const {data}=useStore();
+  const {show,node}=useToast();
+  const [query,setQuery]=useState("");
+  const [selectedId,setSelectedId]=useState<string|null>(null);
+  const [editingId,setEditingId]=useState<string|null>(null);
+  const [sharing,setSharing]=useState(false);
+  const selected=data.reports.find(r=>r.id===selectedId)??null;
+  const editing=selected?.transactions.find(t=>t.id===editingId)??null;
+  const matches=useMemo(()=>{
+    if(!query.trim())return [];
+    const all=[...data.reports.map(r=>({report:r,active:false})),{report:{id:"active",transactions:data.transactions,startDate:data.transactions[0]?.date??new Date().toISOString(),endDate:new Date().toISOString(),totalTopup:0,totalExpense:0,finalBalance:data.balance},active:true}];
+    return all.flatMap(({report,active})=>report.transactions.filter(tx=>txMatchesQuery(tx,query)).map(tx=>({report,tx,active}))).sort((a,b)=>b.tx.date.localeCompare(a.tx.date));
+  },[query,data.reports,data.transactions,data.balance]);
+  const exportReport=async(report:Report)=>{if(sharing)return;setSharing(true);try{const status=await shareReportXlsx(report);show(status==="shared"?"Excel отправлен":status==="downloaded"?"Excel сохранён":"Отправка отменена");}catch{show("Ошибка экспорта Excel","error");}finally{setSharing(false)}};
+  return <div className="archive-screen">
+    <div className="work-section-head"><span>{initialSearch?"ПОИСК / ВСЕ ПЕРИОДЫ":"АРХИВ / ЗАКРЫТЫЕ ПЕРИОДЫ"}</span><span>{data.reports.length} ОТЧЁТОВ</span></div>
+    <h1 className="work-title">{initialSearch?"Найти расход":"Архив отчётов"}</h1>
+    <p className="archive-subtitle">{initialSearch?"Поиск в текущем отчёте и за всю историю":"Завершённые периоды доступны для просмотра, исправления и повторного экспорта."}</p>
+    <div className="archive-search"><Search size={20}/><input type="search" value={query} onChange={e=>{setQuery(e.target.value);setSelectedId(null)}} placeholder="Сумма, дата, категория или комментарий" aria-label="Поиск расходов"/>{query&&<button onClick={()=>setQuery("")} aria-label="Очистить поиск"><X size={18}/></button>}</div>
+    {query.trim()?<div className="archive-results"><div className="work-section-head"><span>СОВПАДЕНИЯ</span><span>{matches.length}</span></div>{matches.length===0?<p className="work-empty">Совпадений нет. Попробуйте другую сумму, дату или категорию.</p>:matches.map(({report,tx,active})=><button className="archive-hit" key={report.id+tx.id} onClick={()=>!active&&setSelectedId(report.id)}><span><strong>{tx.category}</strong><small>{active?"Текущий отчёт":reportTitle(report.startDate,report.endDate)} · {fmtDayMonthYear(tx.date)} · {fmtTime(tx.date)}{tx.comment?" · "+tx.comment:""}</small></span><b>{formatMoney(tx.amount)}</b></button>)}</div>:!selected?<div className="archive-list">{data.reports.length===0?<p className="work-empty">Архив пока пуст. Завершённые отчёты появятся здесь.</p>:data.reports.map((r,i)=><button className="archive-card" key={r.id} onClick={()=>setSelectedId(r.id)}><span className="archive-card-num">{String(data.reports.length-i).padStart(2,"0")}</span><span><strong>{reportTitle(r.startDate,r.endDate)}</strong><small>{r.transactions.length} операций · расходы {formatMoney(r.totalExpense)}</small></span><span className="archive-card-arrow">↗</span></button>)}</div>:<section className="archive-detail"><button className="archive-back" onClick={()=>setSelectedId(null)}><ArrowLeft size={18}/> Все отчёты</button><h2>{reportTitle(selected.startDate,selected.endDate)}</h2><div className="archive-detail-stats"><div><small>Расходы</small><strong>{formatMoney(selected.totalExpense)}</strong></div><div><small>Остаток</small><strong>{formatMoney(selected.finalBalance)}</strong></div></div><button className="archive-export" onClick={()=>exportReport(selected)} disabled={sharing}><FileSpreadsheet size={19}/>{sharing?"Готовлю файл…":"Повторно экспортировать Excel"}</button><div className="work-section-head"><span>ОПЕРАЦИИ</span><span>{selected.transactions.length}</span></div>{[...selected.transactions].reverse().map(tx=><button key={tx.id} className="archive-hit" onClick={()=>setEditingId(tx.id)}><span><strong>{tx.category}</strong><small>{fmtDayMonthYear(tx.date)} · {fmtTime(tx.date)}{tx.hasReceipt?" · чек":""}{tx.comment?" · "+tx.comment:""}</small></span><b>{tx.type==="expense"?"−":"+"}{formatMoney(tx.amount)}</b></button>)}{editing&&<ArchiveEditor key={editing.id} report={selected} tx={editing} onClose={()=>setEditingId(null)}/>}</section>}
+    {node}
+  </div>;
 }

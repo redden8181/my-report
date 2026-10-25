@@ -9,6 +9,8 @@ export interface Transaction {
   /** Всегда положительная. Знак выводится из type. */
   amount: number;
   hasReceipt: boolean;
+  /** Необязательный комментарий к операции. */
+  comment?: string;
   /** ISO-строка даты */
   date: string;
   balanceAfter: number;

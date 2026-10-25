@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Sheet, Switch } from "./ui";
-import { fmtDayMonthYear, fmtTime, parseAmount } from "../utils";
+import { fmtDayMonthYear, fmtTime, parseAmount, toDateInputValue } from "../utils";
 import { useStore } from "../store";
 import type { Transaction } from "../types";
 
@@ -18,6 +18,9 @@ export function EditTransactionModal({
   const [category, setCategory] = useState("");
   const [amountStr, setAmountStr] = useState("");
   const [hasReceipt, setHasReceipt] = useState(false);
+  const [comment,setComment]=useState("");
+  const [date,setDate]=useState("");
+  const [time,setTime]=useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // последний редактируемый объект — шторка не уезжает пустой
   const [lastTx, setLastTx] = useState<Transaction | null>(null);
@@ -28,6 +31,9 @@ export function EditTransactionModal({
       setCategory(tx.category);
       setAmountStr(nfPlain.format(tx.amount));
       setHasReceipt(tx.hasReceipt);
+      setComment(tx.comment??'');
+      setDate(toDateInputValue(new Date(tx.date)));
+      setTime(new Date(tx.date).toTimeString().slice(0,5));
       setConfirmDelete(false);
     }
   }, [tx]);
@@ -41,6 +47,8 @@ export function EditTransactionModal({
       category: category.trim(),
       amount,
       hasReceipt,
+      comment:comment.trim(),
+      date:new Date(date+'T'+time+':00').toISOString(),
     });
     onClose();
   };
@@ -92,6 +100,8 @@ export function EditTransactionModal({
             </div>
           </label>
 
+          <label className="mt-3 block"><span className="micro font-mono text-muted">Комментарий</span><input className="mt-1.5 w-full rounded-xl border border-edge bg-tint px-3.5 py-3 text-[16px]" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Необязательно"/></label>
+          <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-sm">Дата<input className="mt-1 block w-full rounded-lg border border-edge bg-tint p-3 text-[16px]" type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label className="text-sm">Время<input className="mt-1 block w-full rounded-lg border border-edge bg-tint p-3 text-[16px]" type="time" value={time} onChange={e=>setTime(e.target.value)}/></label></div>
           <div className="mt-4 flex items-center justify-between rounded-xl border border-edge bg-tint px-3.5 py-3">
             <span className="text-[15px] font-medium text-ink">Чек есть</span>
             <Switch

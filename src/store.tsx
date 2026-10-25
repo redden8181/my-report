@@ -60,6 +60,7 @@ function fixTransaction(raw: unknown): Transaction | null {
         : "Прочее",
     amount: round2(Math.abs(amount)),
     hasReceipt: Boolean(t.hasReceipt),
+    comment: typeof t.comment === 'string' ? t.comment : '',
     date,
     balanceAfter: 0,
   };
@@ -163,13 +164,15 @@ type Action =
       amount: number;
       hasReceipt: boolean;
       date?: string;
+      comment?: string;
     }
   | {
       type: "UPDATE_TX";
       id: string;
-      patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>;
+      patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>;
     }
   | { type: "DELETE_TX"; id: string }
+  | { type: "UPDATE_ARCHIVED_TX"; reportId:string; id:string; patch:Partial<Pick<Transaction,"category"|"amount"|"hasReceipt"|"date"|"comment">> }
   | { type: "CLOSE_REPORT"; carryOver: boolean }
   | { type: "SET_CATEGORIES"; list: string[] }
   | { type: "SET_HINTS"; category: string; hints: number[] }
@@ -201,6 +204,7 @@ function reducer(state: AppState, action: Action): AppState {
           category: action.category,
           amount: action.amount,
           hasReceipt: action.hasReceipt,
+          comment: action.comment ?? '',
         },
         action.date
       );
@@ -235,6 +239,13 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "UPDATE_ARCHIVED_TX": {
+      return {...state,reports:state.reports.map(report=>{
+        if(report.id!==action.reportId)return report;
+        const txs=recalcTxs(report.transactions.map(tx=>tx.id===action.id?{...tx,...action.patch}:tx));
+        return {...report,transactions:txs,totalTopup:round2(txs.filter(t=>t.type==="topup").reduce((s,t)=>s+t.amount,0)),totalExpense:round2(txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0)),finalBalance:lastBalance(txs)};
+      })};
+    }
     case "DELETE_TX": {
       const recalced = recalcTxs(
         state.transactions.filter((t) => t.id !== action.id)
@@ -329,13 +340,15 @@ interface StoreApi {
     category: string,
     amount: number,
     hasReceipt: boolean,
-    date?: string
+    date?: string,
+    comment?: string
   ) => void;
   updateTransaction: (
     id: string,
-    patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>
+    patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>
   ) => void;
   deleteTransaction: (id: string) => void;
+  updateArchivedTransaction:(reportId:string,id:string,patch:Partial<Pick<Transaction,"category"|"amount"|"hasReceipt"|"date"|"comment">>)=>void;
   closeReport: (carryOver: boolean) => void;
   setCategories: (list: string[]) => void;
   setHints: (category: string, hints: number[]) => void;
@@ -360,21 +373,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
   const addExpense = useCallback(
-    (category: string, amount: number, hasReceipt: boolean, date?: string) =>
+    (category: string, amount: number, hasReceipt: boolean, date?: string, comment?: string) =>
       dispatch({
         type: "ADD_EXPENSE",
         category: category.trim() || "Прочее",
         amount: round2(amount),
         hasReceipt,
         date,
+        comment,
       }),
     []
   );
   const updateTransaction = useCallback(
-    (id: string, patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>) =>
+    (id: string, patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>) =>
       dispatch({ type: "UPDATE_TX", id, patch }),
     []
   );
+  const updateArchivedTransaction=useCallback((reportId:string,id:string,patch:Partial<Pick<Transaction,"category"|"amount"|"hasReceipt"|"date"|"comment">>)=>dispatch({type:"UPDATE_ARCHIVED_TX",reportId,id,patch}),[]);
   const deleteTransaction = useCallback(
     (id: string) => dispatch({ type: "DELETE_TX", id }),
     []
@@ -404,6 +419,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addExpense,
       updateTransaction,
       deleteTransaction,
+      updateArchivedTransaction,
       closeReport,
       setCategories,
       setHints,
