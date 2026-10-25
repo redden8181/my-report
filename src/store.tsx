@@ -60,6 +60,7 @@ function fixTransaction(raw: unknown): Transaction | null {
         : "Прочее",
     amount: round2(Math.abs(amount)),
     hasReceipt: Boolean(t.hasReceipt),
+    comment: typeof t.comment === 'string' ? t.comment : '',
     date,
     balanceAfter: 0,
   };
@@ -163,11 +164,12 @@ type Action =
       amount: number;
       hasReceipt: boolean;
       date?: string;
+      comment?: string;
     }
   | {
       type: "UPDATE_TX";
       id: string;
-      patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>;
+      patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>;
     }
   | { type: "DELETE_TX"; id: string }
   | { type: "CLOSE_REPORT"; carryOver: boolean }
@@ -201,6 +203,7 @@ function reducer(state: AppState, action: Action): AppState {
           category: action.category,
           amount: action.amount,
           hasReceipt: action.hasReceipt,
+          comment: action.comment ?? '',
         },
         action.date
       );
@@ -329,7 +332,8 @@ interface StoreApi {
     category: string,
     amount: number,
     hasReceipt: boolean,
-    date?: string
+    date?: string,
+    comment?: string
   ) => void;
   updateTransaction: (
     id: string,
@@ -360,13 +364,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
   const addExpense = useCallback(
-    (category: string, amount: number, hasReceipt: boolean, date?: string) =>
+    (category: string, amount: number, hasReceipt: boolean, date?: string, comment?: string) =>
       dispatch({
         type: "ADD_EXPENSE",
         category: category.trim() || "Прочее",
         amount: round2(amount),
         hasReceipt,
         date,
+        comment,
       }),
     []
   );
