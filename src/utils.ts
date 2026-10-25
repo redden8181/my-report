@@ -257,6 +257,8 @@ export function txMatchesWord(tx: Transaction, word: string): boolean {
   const hay = norm(
     [
       tx.category,
+      tx.comment ?? '',
+      fmtTime(tx.date),
       tx.type === "topup" ? "пополнение" : "",
       fmtDateExcel(tx.date),
       fmtDayMonth(tx.date),
