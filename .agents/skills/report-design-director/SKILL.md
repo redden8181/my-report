@@ -52,3 +52,12 @@ Act as a senior product designer, art director, and front-end UX engineer for **
 - Do not automatically agree with design suggestions that hurt speed or usability.
 - Prefer a small number of excellent, consistent patterns over a large library of decorative components.
 - When asked for a visual redesign, distinguish concept proposals from implemented code.
+
+## Mandatory full-redesign accountability (2026-10-26)
+- Art Director receives a second chance, not unilateral approval authority. Product lead, UX architect, visual systems designer, iOS/PWA specialist and independent QA must each produce verifiable output. No role may sign off on its own work.
+- Before implementation ask all material clarifying questions; user approves core workflow and design direction. Do not substitute cosmetic changes for a full redesign.
+- The agreed product loop is **one active report**, category-first inline expense entry with category-specific preset amounts, editable timestamp, receipt switch and optional comment; separate Excel export and new-report actions with balance carry-over; archived reports editable; global search across current and all archived reports by amount/date/category/comment.
+- Preserve original financial data and backup compatibility. No private financial backups in public GitHub repos.
+- Validate every route and control, TypeScript, Vite build, empty and populated states, date/time, receipt audit, archive edits, backup restore, Excel, and iPhone keyboard. Record what was not tested.
+- Only deploy via isolated `my-report-preview`; never commit redesign to production `main` without explicit user approval.
+- Full redesign acceptance requires screen-by-screen work on Home, Search, Archive, Report, Settings, top-up and edit flows. A shell-only pass is not acceptable.
