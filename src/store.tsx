@@ -345,7 +345,7 @@ interface StoreApi {
   ) => void;
   updateTransaction: (
     id: string,
-    patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>
+    patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>
   ) => void;
   deleteTransaction: (id: string) => void;
   updateArchivedTransaction:(reportId:string,id:string,patch:Partial<Pick<Transaction,"category"|"amount"|"hasReceipt"|"date"|"comment">>)=>void;
@@ -385,7 +385,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
   const updateTransaction = useCallback(
-    (id: string, patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt">>) =>
+    (id: string, patch: Partial<Pick<Transaction, "category" | "amount" | "hasReceipt" | "date" | "comment">>) =>
       dispatch({ type: "UPDATE_TX", id, patch }),
     []
   );
